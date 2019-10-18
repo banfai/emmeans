@@ -49,13 +49,8 @@ str.emmGrid <- function(object, ...) {
         if (is.null(x)) cat("(predicted by other variables)")
         else cat(paste(format(x, digits = 5, justify = "none"), collapse=", "))
     }
-    showtran = function(tran, label) { # internal convenience fcn
-        if (is.list(tran)) 
-            tran = ifelse(is.null(tran$name), "custom", tran$name)
-        if (!is.null(mul <- object@misc$tran.mult))
-            tran = paste0(mul, "*", tran)
-        cat(paste(label, dQuote(tran), "\n"))
-        
+    showtran = function(misc, label) { # internal convenience fcn
+        cat(paste(label, dQuote(.fmt.tran(misc)), "\n"))
     }
     levs = object@levels
     cat(paste("'", class(object)[1], "' object with variables:\n", sep=""))
@@ -87,9 +82,9 @@ str.emmGrid <- function(object, ...) {
         cat("\n")
     }
     if(!is.null(tran <- object@misc$tran)) {
-        showtran(tran, "Transformation:")
+        showtran(object@misc, "Transformation:")
         if (!is.null(tran2 <- object@misc$tran2))
-            showtran(tran2, "Additional response transformation:")
+            showtran(list(tran = tran2), "Additional response transformation:")
     }
 }
 
@@ -176,6 +171,10 @@ vcov.emmGrid = function(object, ...) {
 #' for that matter), we should have \code{tran = "sqrt"} and \code{tran.mult =
 #' 2}. If absent, a multiple of 1 is assumed.}
 #' 
+#' \item{\code{tran.offset}}{Additive constant before a transformation is applied.
+#' For example, a response transformation of \code{log(y + pi)} has
+#' \code{tran.offset  = pi}. If no value is present, an offset of 0 is assumed.}
+#' 
 #' \item{\code{estName}}{(\code{character}) is the column label used for
 #' displaying predictions or EMMs.}
 #' 
@@ -192,7 +191,7 @@ vcov.emmGrid = function(object, ...) {
 #' 
 #' \item{\code{alpha}}{(numeric) is the default significance level for tests, in
 #' \code{\link{summary.emmGrid}} as well as \code{\link{plot.emmGrid}}
-#' when \samp{intervals = TRUE}. Be cautious that methods that depend on
+#' when \samp{CIs = TRUE}. Be cautious that methods that depend on
 #' specifying \code{alpha} are prone to abuse. See the
 #' discussion in \href{../doc/basics.html#pvalues}{\code{vignette("basics", "emmeans")}}.}
 #' 
@@ -288,7 +287,7 @@ update.emmGrid = function(object, ..., silent = FALSE) {
     valid.misc = c("adjust","alpha","avgd.over","by.vars","delta","df",
                    "initMesg","estName","estType","famSize","infer","inv.lbl",
                    "level","methDesc","nesting","null","predict.type","pri.vars"
-                   ,"side","sigma","tran","tran.mult","tran2","type","is.new.rg")
+                   ,"side","sigma","tran","tran.mult","tran.offset","tran2","type","is.new.rg")
     valid.slots = slotNames(object)
     valid.choices = union(valid.misc, valid.slots)
     misc = object@misc
@@ -501,7 +500,7 @@ emm_defaults = list (
 ### Primary reason to do this is with transform = TRUE, then can 
 ### work with linear functions of the transformed predictions
 
-#' Reconstruct a reference grid with a new transformation
+#' Reconstruct a reference grid with a new transformation or posterior sample
 #' 
 #' The typical use of this function is to cause EMMs to be computed on
 #' a different scale, e.g., the back-transformed scale rather than the 
@@ -519,14 +518,13 @@ emm_defaults = list (
 #' contrasts will be conducted on the new scale -- which is
 #' the reason this function exists. 
 #' 
-#' In cases where the
-#' degrees of freedom depended on the linear function being estimated, the d.f.
-#' from the reference grid are saved, and a kind of \dQuote{containment} method
-#' is substituted in the returned object whereby the calculated d.f. for a new
-#' linear function will be the minimum d.f. among those having nonzero
-#' coefficients. This is kind of an \emph{ad hoc} method, and it can
-#' over-estimate the degrees of freedom in some cases.
-#'
+#' This function may also be used to convert a reference grid for a 
+#' frequentist model to one for a Bayesian model. To do so, specify a value
+#' for \code{N.sim} and a posterior sample is simulated using the function \code{sim}.
+#' . The grid may be further processed in accordance with
+#' the other arguments; or if \code{transform = "pass"}, it is simply returned with the 
+#' only change being the addition of the posterior sample.
+#' 
 #' @param object An object of class \code{emmGrid}
 #' @param transform Character or logical value. If \code{"response"} or
 #'   \code{"mu"}, the inverse transformation is applied to the estimates in the
@@ -535,6 +533,8 @@ emm_defaults = list (
 #'   results are formulated as if the response had been \code{log}-transformed;
 #'   if \code{"none"}, predictions thereof are on the same scale as in 
 #'   \code{object}, and any internal transformation information is preserved. 
+#'   If \code{transform = "pass"}, the object is not re-gridded in any way (this
+#'   may be useful in conjunction with \code{N.sim}).
 #'   For compatibility with past versions, \code{transform} may also be logical;
 #'   \code{TRUE} is taken as \code{"response"}, and \code{FALSE} as 
 #'   \code{"none"}.
@@ -553,8 +553,28 @@ emm_defaults = list (
 #'   \code{transform = "response"} and a transformation
 #'   is in effect). If not specified,
 #'   \code{object@misc$sigma} is used, and an error is thrown if it is not found.
+#' @param N.sim Integer value. If specified and \code{object} is based on a 
+#'   frequentist model (i.e., does not have a posterior sample), then a fake 
+#'   posterior sample is generated using the function \code{sim}.
+#' @param sim A function of three arguments (no names are assumed).
+#'   If \code{N.sim} is supplied with a frequentist model, this function is called
+#'   with respective arguments \code{N.sim}, \code{object@bhat}, and \code{object@V}.
+#'   The default is the multivariate normal distribution.
 #' @param ... Ignored.
-#'   
+#' 
+#' @section Degrees of freedom:  
+#' In cases where the
+#' degrees of freedom depended on the linear function being estimated (e.g.,
+#' Satterthwaite method), the d.f.
+#' from the reference grid are saved, and a kind of \dQuote{containment} method
+#' is substituted in the returned object, whereby the calculated d.f. for a new
+#' linear function will be the minimum d.f. among those having nonzero
+#' coefficients. This is kind of an \emph{ad hoc} method, and it can
+#' over-estimate the degrees of freedom in some cases. An annotation is
+#' displayed below any subsequent summary results statisng that the 
+#' degrees-of-freedom method is inherited from the previous method at
+#' the time of re-gridding.
+#'
 #' @note Another way to use \code{regrid} is to supply a \code{transform} 
 #'   argument to \code{\link{ref_grid}} (either directly of indirectly via
 #'   \code{\link{emmeans}}). This is often a simpler approach if the reference
@@ -565,26 +585,41 @@ emm_defaults = list (
 #'
 #' @examples
 #' pigs.lm <- lm(log(conc) ~ source + factor(percent), data = pigs)
+#' rg <- ref_grid(pigs.lm)
 #' 
 #' # This will yield EMMs as GEOMETRIC means of concentrations:
-#' emmeans(pigs.lm, "source", type = "response")
-#' # NOTE: pairs() of the above will be RATIOS of these results
+#' (emm1 <- emmeans(rg, "source", type = "response"))
+#' pairs(emm1) ## We obtain RATIOS
 #' 
 #' # This will yield EMMs as ARITHMETIC means of concentrations:
-#' emmeans(regrid(ref_grid(pigs.lm, transform = "response")), "source")
-#' # Same thing, made simpler:
-#' emmeans(pigs.lm, "source", transform = "response")
-#' # NOTE: pairs() of the above will be DIFFERENCES of these results
-regrid = function(object, transform = c("response", "mu", "unlink", "log", "none"), 
+#' (emm2 <- emmeans(regrid(rg, transform = "response"), "source"))
+#' pairs(emm2)  ## We obtain DIFFERENCES
+#' # Same result, useful if we hadn't already created 'rg'
+#' # emm2 <- emmeans(pigs.lm, "source", transform = "response")
+#' 
+#' # Simulate a posterior sample
+#' set.seed(2.71828)
+#' rgb <- regrid(rg, N.sim = 200, transform = "pass")
+#' emmeans(rgb, "source", type = "response")  ## similar to emm1
+regrid = function(object, transform = c("response", "mu", "unlink", "log", "none", "pass"), 
                   inv.log.lbl = "response", predict.type, 
-                  bias.adjust = get_emm_option("back.bias.adj"), sigma, ...) 
+                  bias.adjust = get_emm_option("back.bias.adj"), sigma, 
+                  N.sim, sim = mvtnorm::rmvnorm, ...) 
 {
     if (is.logical(transform))   # for backward-compatibility
         transform = ifelse(transform, "response", "none")
     else
         transform = match.arg(transform)
     
-    # if we have two transformations to undo, do the first one recursively
+    if (is.na(object@post.beta[1]) && !missing(N.sim)) {
+        message("Generating a posterior sample of size ", N.sim)
+        object@post.beta = sim(N.sim, object@bhat, object@V)
+    }
+
+    if (transform == "pass")
+        return(object)
+    
+        # if we have two transformations to undo, do the first one recursively
     if ((transform == "response") && (!is.null(object@misc$tran2)))
         object = regrid(object, transform = "mu")
     
@@ -592,8 +627,11 @@ regrid = function(object, transform = c("response", "mu", "unlink", "log", "none
     PB = object@post.beta
     NC = attr(PB, "n.chains")
     
-    if (!is.na(PB[1])) # fix up post.beta BEFORE we overwrite parameters
+    if (!is.na(PB[1])) { # fix up post.beta BEFORE we overwrite parameters
         PB = PB %*% t(object@linfct)
+        if (".offset." %in% names(object@grid))
+            PB = t(apply(PB, 1, function(.) . + object@grid[[".offset."]]))
+    }
     
     est = .est.se.df(object, do.se = TRUE) ###FALSE)
     estble = !(is.na(est[[1]]))
@@ -610,6 +648,7 @@ regrid = function(object, transform = c("response", "mu", "unlink", "log", "none
     edf = df[estble]
     if (length(edf) == 0) edf = NA
     # note both NA/NA and Inf/Inf test is.na() = TRUE
+    prev.df.msg = attr(object@dffun, "mesg")
     if (any(is.na(edf/edf)) || (diff(range(edf)) < .01)) { # use common value
         object@dfargs = list(df = mean(edf, na.rm = TRUE))
         object@dffun = function(k, dfargs) dfargs$df
@@ -621,6 +660,11 @@ regrid = function(object, transform = c("response", "mu", "unlink", "log", "none
             ifelse(length(idx) == 0, NA, min(dfargs$df[idx], na.rm = TRUE))
         }
     }
+    if(!is.null(prev.df.msg)) 
+        attr(object@dffun, "mesg") = ifelse(
+            startsWith(prev.df.msg, "inherited"), prev.df.msg,
+                paste("inherited from", prev.df.msg, "when re-gridding"))
+
     
     if(transform %in% c("response", "mu", "unlink", "log") && !is.null(object@misc$tran)) {
         flink = link = attr(est, "link")
@@ -647,10 +691,10 @@ regrid = function(object, transform = c("response", "mu", "unlink", "log", "none
         }
         if((transform %in% c("mu", "unlink")) && !is.null(object@misc$tran2)) {
             object@misc$tran = object@misc$tran2
-            object@misc$tran2 = object@misc$tran.mult = object@misc$inv.lbl = NULL
+            object@misc$tran2 = object@misc$tran.mult = object@misc$tran.offset = object@misc$inv.lbl = NULL
         }
         else
-            object@misc$tran = object@misc$tran.mult = object@misc$inv.lbl = NULL
+            object@misc$tran = object@misc$tran.mult = object@misc$tran.offset = object@misc$inv.lbl = NULL
         sigma = object@misc$sigma = NULL
     }
     if (transform == "log") { # from prev block, we now have stuff on response scale

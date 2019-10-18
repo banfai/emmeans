@@ -1,11 +1,72 @@
 ## NEWS for the emmeans package
 
-
-emmeans 1.3.5.1099xxx
+emmeans 1.4.1.009xxx
 -------------
+
+  * First argument of `emtrends()` is now `object`, not `model`, to avoid
+    potential mis-matching of the latter with optional `mode` argument
+  * `emtrends()` now uses more robust and efficient code whereby a single
+    reference grid is constructed containing all needed values of `var`. The old
+    version could fail, e.g., in cases where the reference grid involves
+    post-processing. (#145)
+  * Added `scale` argument to `contrast()`
+  * Added new `"identity"` contrast method
+  * New `eff_size()` function for Cohen effect sizes
+  * Expanded capabilities for interaction contrasts (#146)
+  * Changed default to `covnest = TRUE` argument in `ref_grid()` (#148)
+    This could change the results obtained from some analyses with previous 
+    versions, as now covariates with multiple levels will by default figure
+    in to weights. Specify `covnest = FALSE` to replicate those old results.
+  * Bug fixes: `regrid` ignored offsets with Bayesian models; `emtrends()` did
+    not supply `options` and `misc` arguments to `emm_basis()` (#143)
+
+
+emmeans 1.4.1
+-------------
+
+  * Added non-estimability infrastructure for Bayesian models, `stanreg`
+    in particular (#114)
+  * Added `max.degree` argument in `emtrends()` making it possible to
+    obtain higher-order trends (#133). Plus minor tuneups, e.g., smaller 
+    default increment for difference quotients
+  * Made `emmeans()` more forgiving with 'by` variables; e.g.,
+    `emmeans(model, ~ dose | treat, by = "route")` will find both `by`
+    variables whereas previously `"route"` would be ignored.
+  * Temporary fix for glitch in gls support where Satterthwaite isn't
+    always right.
+  * Attempt to make annotations clearer and more consistent regarding
+    degrees-of-freedom methods.
+  * Provisions whereby externally provided `emm_basis()` and `recover_data()`
+    methods are used in preference to internal ones - so package developers
+    can provide improvements over what I've cobbled together.
+  * Tried to produce more informative message when `recover_data()` fails
+  * Fixed bug in `contrast()` in identifying true contrasts (#134)
+  * Fixed a bug in `plot.summary_emm()` regarding `CIs` and `intervals` (#137)
+  * Improved support for response transformations. Models with formulas like
+    like `log(y + 1) ~ ...` and `2*sqrt(y + 0.5) ~ ...` are now auto-detected.
+    [This may cause discrepancies with examples in past usages, but if so, that
+    would be because the response transformation was previously incorrectly 
+    interpreted.]
+  * Added a `ratios` argument to `contrast()` to decide how to handle `log` and `logit`
+  * Added message/annotation when contrasts are summarized with `type = "response"`
+    but there is no way to back-transform them (or we opted out with `ratios = FALSE`)
+    
+
+emmeans 1.4
+-----------
 
   * Added a courtesy function `.emm_register()` to make it easier for other
     packages to register their **emmeans** support methods
+  * Clarified the "confidence intervals" vignette discussion of `infer`,
+    explaining that Bayesian models are handled differently (#128)
+  * Added `PIs` option to `plot.emmGrid()` and `emmip()` (#131). Also, in
+    `plot.emmGrid()`, the `intervals` argument has been changed to `CIs`
+    for sake of consistency and less confusion; `intervals` is still
+    supported for backaward compatibility.
+  * `plot.emmGrid` gains a `colors` argument so we can customize colors used.
+  * Bug fix for `glht` support (#132 contributed by Balsz Banfai)
+  * `regrid` gains `sim` and `N.sim` arguments whereby we can generate a
+    fake posterior sample from a frequentist model.
     
 
 emmeans 1.3.5.1
