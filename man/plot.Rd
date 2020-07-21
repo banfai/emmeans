@@ -10,9 +10,9 @@
   alpha = 0.05, adjust = "tukey", int.adjust = "none", intervals,
   frequentist, ...)
 
-\method{plot}{summary_emm}(x, y, horizontal = TRUE, CIs = TRUE, xlab,
-  ylab, layout, colors = c("black", "blue", "blue", "red"), intervals,
-  ...)
+\method{plot}{summary_emm}(x, y, horizontal = TRUE, CIs = TRUE, xlab, ylab,
+  layout, colors = c("black", "blue", "blue", "red"), intervals,
+  plotit = TRUE, ...)
 }
 \arguments{
 \item{x}{Object of class \code{emmGrid} or \code{summary_emm}}
@@ -70,6 +70,22 @@ plotted horizontally or vertically}
 \item{ylab}{Character label for vertical axis}
 
 \item{layout}{Numeric value passed to \code{\link[lattice:xyplot]{dotplot}}}
+
+\item{plotit}{Logical value. If \code{TRUE}, a graphical object is returned;
+if \code{FALSE}, a data.frame is returned containing all the values
+used to construct the plot.}
+}
+\value{
+If \code{plotit = TRUE}, a graphical object is returned.
+
+  If \code{plotit = FALSE}, a \code{data.frame} with the table of
+  EMMs that would be plotted. In the latter case, the estimate being plotted
+  is named \code{the.emmean}, and any factors involved have the same names as
+  in the object. Confidence limits are named \code{lower.CL} and
+  \code{upper.CL}, prediction limits are named \code{lpl} and \code{upl}, and
+  comparison-arrow limits are named \code{lcmpl} and \code{ucmpl}.
+  There is also a variable named \code{pri.fac} which contains the factor 
+  combinations that are \emph{not} among the \code{by} variables.
 }
 \description{
 Methods are provided to plot EMMs as side-by-side CIs, and optionally to display 
@@ -90,7 +106,9 @@ approximate, and in some cases may fail to accurately reflect the pairwise
 comparisons of the estimates -- especially when estimates having large and
 small standard errors are intermingled in just the wrong way. Note that the
 maximum and minimum estimates have arrows only in one direction, since there
-is no need to compare them with anything higher or lower, respectively.
+is no need to compare them with anything higher or lower, respectively. See
+the \href{../doc/xplanations.html#arrows}{\code{vignette("xplanations",
+"emmeans")}} for details on how these are derived.
 
 If \code{adjust} or \code{int.adjust} are not supplied, they default to the 
 internal \code{adjust} setting saved in \code{pairs(x)} and \code{x} 

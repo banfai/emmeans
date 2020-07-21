@@ -25,6 +25,14 @@ what arguments to pass to \code{\link{summary.emmGrid}}.
 The \code{update} method allows safer management of these settings than
 by direct modification of its slots.
 }
+\note{
+When it makes sense, an option set by \code{update} will persist into 
+future results based on that object. But some options are disabled as well.
+For example, a \code{calc} option will be nulled-out if \code{contrast}
+is called, because it probably will not make sense to do the same 
+calculations on the contrast results, and in fact the variable(s) needed
+may not even still exist.
+}
 \section{Details}{
 
 The names in \code{\dots} are partially matched against those that are valid, and if a match is found, it adds or replaces the current setting. The valid names are
@@ -77,11 +85,6 @@ discussion in \href{../doc/basics.html#pvalues}{\code{vignette("basics", "emmean
 \item{\code{adjust}}{(\code{character)}) is the default for the \code{adjust}
 argument in \code{\link{summary.emmGrid}}.}
 
-\item{\code{estType}}{(\code{character}) is the type of the estimate. It
-should match one of \samp{c("prediction", "contrast", "pairs")}. This is used
-along with \code{"adjust"} to determine appropriate adjustments to P values
-and confidence intervals.}
-
 \item{\code{famSize}}{(integer) is the number of means involved in a family of
 inferences; used in Tukey adjustment}
 
@@ -94,6 +97,8 @@ of \sQuote{level} to distinguish it from the slot name \sQuote{levels}.}
 
 \item{\code{df}}{(numeric) overrides the default degrees of freedom with a
 specified single value.}
+
+\item{\code{calc}}{(list) additional calculated columns. See \code{\link{summary.emmGrid}}.}
 
 \item{\code{null}}{(numeric) null hypothesis for \code{summary} or
 \code{test} (taken to be zero if missing).}
@@ -112,6 +117,16 @@ of displaying predictions in \code{\link{summary.emmGrid}},
 \code{\link{predict.emmGrid}}, and \code{\link{emmip}}. Valid values are
 \code{"link"} (with synonyms \code{"lp"} and \code{"linear"}), or
 \code{"response"}.}
+
+\item{\code{bias.adjust}, \code{frequentist}}{(character) These
+are used by \code{summary} if the value of these arguments are not specified.}
+
+\item{\code{estType}}{(\code{character}) is used internally to determine 
+what \code{adjust} methods are appropriate. It should match one of 
+\samp{c("prediction", "contrast", "pairs")}. As an example of why this is needed,
+the Tukey adjustment should only be used for pairwise comparisons 
+(\code{estType = "pairs"}); if \code{estType} is some other string, Tukey
+adjustments are not allowed.}
 
 \item{\code{avgd.over}}{(\code{character)} vector) are the names of the 
 variables whose levels are averaged over in obtaining marginal averages of 
@@ -157,9 +172,11 @@ conform.}
 mypigs <- transform(pigs, logconc = log(pigs$conc))
 mypigs.lm <- lm(logconc ~ source + factor(percent), data = mypigs)
 
-# Reference grid that knows about the transformation:
+# Reference grid that knows about the transformation
+# and asks to include the sample size in any summaries:
 mypigs.rg <- update(ref_grid(mypigs.lm), tran = "log", 
-                    predict.type = "response")
+                    predict.type = "response",
+                    calc = c(n = ~.wgt.))
 emmeans(mypigs.rg, "source")
 }
 \seealso{

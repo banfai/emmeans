@@ -193,7 +193,7 @@ as.mcmc.list.emmGrid = function(x, names = TRUE, ...) {
 #' 
 #' This function computes point estimates and HPD intervals for each
 #' factor combination in \code{object@emmGrid}. While this function
-#' may be called independently, it is called utomatically by the S3 method
+#' may be called independently, it is called automatically by the S3 method
 #' \code{\link{summary.emmGrid}} when the object is based on a Bayesian model.
 #' (Note: the \code{level} argument, or its default, is passed as \code{prob}).
 #'
@@ -388,6 +388,18 @@ emm_basis.MCMCglmm = function(object, trms, xlev, grid, vcov.,
     if (mode == "multinomial") {
         misc$postGridHook = .MCMCglmm.multinom.postGrid
     }
+    else { # try to figure out the link
+        fam = unique(object$family)
+        if (length(fam) > 1)
+            stop("There is more than one 'family' in this model - too complex for emmeans support")
+        link = switch(fam,
+                      poisson = "log",
+                      multinomial = "log",
+                      categorical = "logit",
+                      ordinal = "logit") # maybe more later?
+        if (!is.null(link))
+            misc = .std.link.labels(list(link = link), misc)
+    }
     list(X = X, bhat = bhat, nbasis = matrix(NA), V = V, 
          dffun = function(k, dfargs) Inf, dfargs = list(), 
          misc = misc, post.beta = Sol)
@@ -395,7 +407,7 @@ emm_basis.MCMCglmm = function(object, trms, xlev, grid, vcov.,
 
 
 
-.MCMCglmm.multinom.postGrid = function(object) {
+.MCMCglmm.multinom.postGrid = function(object, ...) {
     linfct = object@linfct
     misc = object@misc
     post.lp = object@post.beta %*% t(linfct)
@@ -517,12 +529,6 @@ recover_data.stanreg = function(object, ...) {
 
 # note: mode and rescale are ignored for some models
 emm_basis.stanreg = function(object, trms, xlev, grid, mode, rescale, ...) {
-    m = model.frame(trms, grid, na.action = na.pass, xlev = xlev)
-    if(is.null(contr <- object$contrasts))
-        contr = attr(model.matrix(object), "contrasts")
-    X = model.matrix(trms, m, contrasts.arg = contr)
-    bhat = rstanarm::fixef(object)
-    V = vcov(object)
     misc = list()
     if (!is.null(object$family)) {
         if (is.character(object$family)) # work around bug for stan_polr
@@ -530,6 +536,23 @@ emm_basis.stanreg = function(object, trms, xlev, grid, mode, rescale, ...) {
         else
             misc = .std.link.labels(object$family, misc)
     }
+    # Previous code...
+    ### m = model.frame(trms, grid, na.action = na.pass, xlev = xlev)
+    ### if(is.null(contr <- object$contrasts))
+    ###     contr = attr(model.matrix(object), "contrasts")
+    ### X = model.matrix(trms, m, contrasts.arg = contr)
+    ### bhat = rstanarm::fixef(object)
+    ### nms = intersect(colnames(X), names(bhat))
+    ### bhat = bhat[nms]
+    ### V = vcov(object)[nms, nms, drop = FALSE]
+
+    # Instead, use internal routine in rstanarm to get the model matrix
+    # Later, we'll get bhat and V from the posterior sample because
+    # the vcov(object) doesn't always jibe with fixef(object)
+    pp_data = get("pp_data", envir = getNamespace("rstanarm"))
+    X = pp_data(object, newdata = grid, re.form = ~0, ...)[[1]]
+    nms = colnames(X)
+    
     if(!is.null(object$zeta)) {   # Polytomous regression model
         if (missing(mode))
             mode = "latent"
@@ -537,7 +560,7 @@ emm_basis.stanreg = function(object, trms, xlev, grid, mode, rescale, ...) {
             mode = match.arg(mode, 
                              c("latent", "linear.predictor", "cum.prob", "exc.prob", "prob", "mean.class"))
         
-        xint = match("(Intercept)", colnames(X), nomatch = 0L)
+        xint = match("(Intercept)", nms, nomatch = 0L)
         if (xint > 0L) 
             X = X[, -xint, drop = FALSE]
         k = length(object$zeta)
@@ -563,20 +586,28 @@ emm_basis.stanreg = function(object, trms, xlev, grid, mode, rescale, ...) {
             }
         }
         
-        misc$respName = as.character(terms(object))[2]
+        misc$respName = as.character.default(terms(object))[2]
     }
-    samp = as.matrix(object$stanfit)[, names(bhat), drop = FALSE]
+    samp = as.matrix(object$stanfit)[, nms, drop = FALSE]
     attr(samp, "n.chains") = object$stanfit@sim$chains
+
+    bhat = apply(samp, 2, mean)
+    V = cov(samp)
+    
     # estimability...
     nbasis = estimability::all.estble
     all.nms = colnames(X)
-    if (length(names(bhat)) < (n <- length(all.nms))) {
+    if (length(nms) < length(all.nms)) {
+        if(is.null(contr <- object$contrasts))
+            contr = attr(model.matrix(object), "contrasts")
         coef = NA * X[1, ]
         coef[names(bhat)] = bhat
         bhat = coef
         mmat = model.matrix(trms, object$data, contrasts.arg = contr)
         nbasis = estimability::nonest.basis(mmat)
     }
+    
+    
     list(X = X, bhat = bhat, nbasis = nbasis, V = V, 
          dffun = function(k, dfargs) Inf, dfargs = list(), 
          misc = misc, post.beta = samp)

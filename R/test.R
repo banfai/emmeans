@@ -126,7 +126,7 @@ test.emmGrid = function(object, null = 0,
             if (inherits(F, "try-error"))
                 c(df1 = r, df2 = NA,  F.ratio = NA, p.value = NA, note = 1)
             else {
-                df2 = object@dffun(tQ, object@dfargs)
+                df2 = min(apply(tQ, 1, function(.) object@dffun(., object@dfargs)))
                 if (is.na(df2))
                     p.value = pchisq(F*r, r, lower.tail = FALSE)
                 else
@@ -218,10 +218,11 @@ test.emmGrid = function(object, null = 0,
 #' # (These two models have identical fitted values and residuals)
 #' 
 #' joint_tests(toy.fac)
+#' joint_tests(toy.cov)   # female is regarded as a 2-level factor by default
 #' 
-#' joint_tests(toy.cov)                      # ref grid uses mean(female) = 0.4
-#' joint_tests(toy.cov, cov.reduce = FALSE)  # ref grid uses female = c(0, 1) 
-#' joint_tests(toy.cov, at = list(female = c(-1, 1)))  # center on intercept
+#' joint_tests(toy.cov, at = list(female = 0.5))
+#' joint_tests(toy.cov, cov.keep = 0)   # i.e., female = mean(toy$female)
+#' joint_tests(toy.cov, at = list(female = 0))
 #' 
 #' # -- Compare with SAS output -- female as factor --
 #' ## Source          DF    Type III SS    Mean Square   F Value   Pr > F
@@ -275,17 +276,17 @@ joint_tests = function(object, by = NULL, show0df = FALSE, ...) {
 }
 
 # provide for displaying in standard 'anova' format (with astars etc.)
-# I'm not going there now. Maybe later, probably not
+# I'm not g
 
-#' #' @export
-#' as.anova = function(object, ...)
-#'     UseMethod("as.anova")
-#' 
-#' as.anova.summary_emm = function(object, ...) {
-#'     class(object) = c("anova", "data.frame")
-#'     row.names(object) = as.character(object[[1]])
-#'     names(object) = gsub("p.value", "Pr(>F)", names(object))
-#'     object[-1]
-#' }
+# #' @export
+# as.anova = function(object, ...)
+#     UseMethod("as.anova")
+# 
+# as.anova.summary_emm = function(object, ...) {
+#     class(object) = c("anova", "data.frame")
+#     row.names(object) = as.character(object[[1]])
+#     names(object) = gsub("p.value", "Pr(>F)", names(object))
+#     object[-1]
+# }
 
 

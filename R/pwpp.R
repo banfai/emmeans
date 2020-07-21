@@ -1,5 +1,5 @@
 ##############################################################################
-#    Copyright (c) 2012-2019 Russell V. Lenth                                #
+#    Copyright (c) 2012-2020 Russell V. Lenth                                #
 #                                                                            #
 #    This file is part of the emmeans package for R (*emmeans*)              #
 #                                                                            #
@@ -32,6 +32,8 @@
 #' and half-line segments appear in the color of the other level.
 #' The P-value scale is nonlinear, so as to stretch-out smaller P values and
 #' compress larger ones.
+#' P values smaller than 0.0004 are altered and plotted in a way that makes 
+#'   them more distinguishable from one another.
 #' 
 #' If \code{xlab}, \code{ylab}, and \code{xsub} are not provided, reasonable labels
 #' are created. \code{xsub} is used to note special features; e.g., equivalence
@@ -68,6 +70,10 @@
 #' @param xlab Character label to use in place of the default for the P-value axis.
 #' @param ylab Character label to use in place of the default for the primary-factor axis.
 #' @param xsub Character label used as caption at the lower right of the plot.
+#' @param plim numeric vector of value(s) between 0 and 1. These are included
+#'   among the observed p values so that the range of tick marks includes at
+#'   least the range of \code{plim}. Choosing \code{plim = c(0,1)} will ensure
+#'   the widest possible range.
 #' @param add.space Numeric value to adjust amount of space used for value labels. Positioning
 #'                  of value labels is tricky, and depends on how many panels and the
 #'                  physical size of the plotting region. This parameter allows the user to
@@ -75,8 +81,12 @@
 #'                  about one character width (right if positive, left if negative).
 #' @param ... Additional arguments passed to \code{contrast} and \code{\link{summary.emmGrid}}
 #' 
-#' @note The \pkg{ggplot2} package must be installed in order for \code{pwpp} to work.
+#' 
+#' @note The \pkg{ggplot2} and \pkg{scales} packages must be installed in order 
+#'   for \code{pwpp} to work.
 #'
+#' @seealso A numerical display of essentially the same results is available
+#'   from \code{\link{pwpm}}
 #' @export
 #' @examples
 #' pigs.lm <- lm(log(conc) ~ source * factor(percent), data = pigs)
@@ -84,7 +94,7 @@
 #' pwpp(emm)
 #' pwpp(emm, method = "trt.vs.ctrl1", type = "response", side = ">")
 pwpp = function(emm, method = "pairwise", by, sort = TRUE, values = TRUE, rows = ".",
-                xlab, ylab, xsub = "", add.space = 0, ...) {
+                xlab, ylab, xsub = "", plim = numeric(0), add.space = 0, ...) {
     if(missing(by)) 
         by = emm@misc$by.vars
     
@@ -116,6 +126,8 @@ pwpp = function(emm, method = "pairwise", by, sort = TRUE, values = TRUE, rows =
         else
             xsub = c("Left-sided tests", "", "Right-sided tests")[side + 2]
     }
+    
+    sep = get_emm_option("sep")
     if(missing(ylab))
         ylab = paste(attr(emm.summ, "pri.vars"), collapse = ":")
     
@@ -128,9 +140,9 @@ pwpp = function(emm, method = "pairwise", by, sort = TRUE, values = TRUE, rows =
         c(which(x == 1), which(x == -1))
     })
     primv = setdiff(attr(emm.summ, "pri.vars"), by)
-    pf = do.call(paste, c(unname(emm.summ[primv]), sep = ":"))
+    pf = do.call(paste, c(unname(emm.summ[primv]), sep = sep))
     pemm = suppressMessages(emmeans(emm, primv))
-    levs = do.call(paste, c(unname(pemm@grid[primv]), sep = ":"))
+    levs = do.call(paste, c(unname(pemm@grid[primv]), sep = sep))
     if(sort) ord = order(predict(pemm))
     else ord = seq_along(pf)
     pf = emm.summ$pri.fac = factor(pf, levels = levs[ord])
@@ -161,11 +173,20 @@ pwpp = function(emm, method = "pairwise", by, sort = TRUE, values = TRUE, rows =
         tmp$minus = con.summ$plus
         con.summ = rbind(con.summ, tmp)
         
+        # find ranges to ensure we get tick marks:
+        exmaj = c(0, .pvmaj.brk)
+        pvtmp = c(plim, con.summ$p.value)
+        pvtmp = pvtmp[!is.na(pvtmp)]
+        tick.min = max(exmaj[exmaj <= min(pvtmp)])
+        tick.max = min(exmaj[exmaj >= max(pvtmp)])
+        
         grobj = ggplot2::ggplot(data = con.summ, 
                                 ggplot2::aes_(x = ~p.value, y = ~plus,
                                               color = ~minus, group = ~minus)) +
             ggplot2::geom_point(size = 2) +
-            ggplot2::geom_segment(ggplot2::aes_(xend = ~p.value, yend = ~midpt))
+            ggplot2::geom_segment(ggplot2::aes_(xend = ~p.value, yend = ~midpt)) +
+            ggplot2::geom_point(ggplot2::aes(x = tick.min, y = 1), alpha = 0) +
+            ggplot2::geom_point(ggplot2::aes(x = tick.max, y = 1), alpha = 0)
         if (!is.null(by)) {
             cols = setdiff(by, rows)
             if (length(cols) > 0)
@@ -185,7 +206,7 @@ pwpp = function(emm, method = "pairwise", by, sort = TRUE, values = TRUE, rows =
             emm.summ$minus = emm.summ$pri.fac # for consistency in grouping/labeling
             dig = .opt.dig(emm.summ[, estName])
             emm.summ$fmtval = format(emm.summ[[estName]], digits = dig)
-            tminp = .pval.tran(min(con.summ$p.value))
+            tminp = .pval.tran(min(c(tick.min, con.summ$p.value), na.rm=TRUE))
             pos = .pval.inv(tminp - .025)
             lpad = .012 * (add.space + max(nchar(emm.summ$fmtval))) * ncols # how much space needed for labels rel to (0,1)
             lpad = lpad * (1.1 - tminp) # scale closer to actual width of scales
@@ -226,9 +247,9 @@ pwpp = function(emm, method = "pairwise", by, sort = TRUE, values = TRUE, rows =
 .tran.sd = 3
 .tran.div = pnorm(0, .tran.ctr, .tran.sd)
 
-.pvmaj.brk = c(.001, .01, .05, .1, .5, 1)
+.pvmaj.brk = c(.001, .01, .05, .1, .2, .5, 1)
 #.pvmin.brk = c(.0001, .0005, seq(.001, .009, by = .001), seq(.02 ,.09, by = .01), .2, .3, .4, .6, .7, .8, .9)
-.pvmin.brk = c(.0001, .0005, .001, .005, seq(.01 ,.1, by = .01), .2, .3, .4, .5, 1)
+.pvmin.brk = c(.0005, .001, .005, seq(.01 ,.1, by = .01), .2, .3, .4, .5, 1)
 
 # transforms x in (0, 1] to t in (0,1], while any x's < 0 or > 1 are preserved as is
 # This allows me to position marginal labels etc. where I want
@@ -257,15 +278,22 @@ pwpp = function(emm, method = "pairwise", by, sort = TRUE, values = TRUE, rows =
 
 ### quick & dirty algorithm to Stretch out P values so more distinguishable on transformed scale
 gran = function(x, min_incr = .01) {
+    savex = x
+    x = x[!is.na(x)]
     if ((length(x) <= 3) || (diff(range(x)) == 0))
-        return(x)
+        return(savex)
     
     kink = function(xx) { # linear spline basis; call with knot subtracted
         xx[xx < 0] = 0
         xx
     }
     
-    x[x < .00009] = .00009   # forces granulation of extremely small P
+    ### x[x < .00009] = .00009   # forces granulation of extremely small P
+    # spread-out the p values less than .0004
+    rnk = rank(x)
+    sm = which(x < .0004)
+    if(length(sm) > 0)
+        x[sm] = .0004 - .0003 * rnk[sm] / length(sm)
     
     ord = order(x)
     tx = log(x[ord])
@@ -278,6 +306,196 @@ gran = function(x, min_incr = .01) {
         tx = ttx
     tx[tx > 0] = 0
     x[ord] = exp(tx)
-    x
+    savex[!is.na(savex)] = x
+    savex
 }
+
+
+
+#' Pairwise P-value matrix (plus other statistics)
+#'
+#' This function presents results from \code{emmeans} and pairwise comparisons
+#' thereof in a compact way. It displays a matrix (or matrices) of estimates,
+#' pairwise differences, and P values. The user may opt to exclude any of these
+#' via arguments \code{means}, \code{diffs}, and \code{pvals}, respectively.
+#' To control the direction of the pairwise differences, use \code{reverse};
+#' and to control what appears in the upper and lower triangle(s), use \code{flip}.
+#' Optional arguments are passed to \code{contrast.emmGrid} and/or 
+#' \code{summary.emmGrid}, making it possible to control what estimates 
+#' and tests are displayed.
+#'
+#' @param emm An \code{emmGrid} object
+#' @param by Character vector of variable(s) in the grid to condition on. These
+#'   will create different matrices, one for each level or level-combination.
+#'   If missing, \code{by} is set to \code{emm@misc$by.vars}.
+#'   Grid factors not in \code{by} are the \emph{primary} factors:
+#'   whose levels or level combinations are compared pairwise.
+#' @param reverse Logical value passed to \code{\link{pairs.emmGrid}}.
+#'   Thus, \code{FALSE} specifies \code{"pairwise"} comparisons 
+#'   (earlier vs. later), and \code{TRUE} specifies \code{"revpairwise"}
+#'   comparisons (later vs. earlier).
+#' @param pvals Logical value. If \code{TRUE}, the pairwise differences 
+#'   of the EMMs are included in each matrix according to \code{flip}.
+#' @param means Logical value. If \code{TRUE}, the estimated marginal means
+#'   (EMMs) from \code{emm} are included in the matrix diagonal(s).
+#' @param diffs Logical value. If \code{TRUE}, the pairwise differences 
+#'   of the EMMs are included in each matrix according to \code{flip}.
+#' @param flip Logical value that determines where P values and differences 
+#'   are placed. \code{FALSE} places the P values in the upper triangle
+#'   and differences in the lower, and \code{TRUE} does just the opposite.
+#' @param digits Integer. Number of digits to display. If missing,
+#'   an optimal number of digits is determined.
+#' @param ... Additional arguments passed to \code{\link{contrast.emmGrid}} and 
+#'   \code{\link{summary.emmGrid}}. You should \emph{not} include \code{method}
+#'   here, because pairwise comparisons are always used. 
+#'
+#' @return A matrix or `list` of matrices, one for each `by` level.
+#' 
+#' @seealso A graphical display of essentially the same results is available
+#'   from \code{\link{pwpp}}
+#' @export
+#'
+#' @examples
+#' warp.lm <- lm(breaks ~ wool * tension, data = warpbreaks)
+#' warp.emm <- emmeans(warp.lm, ~ tension | wool)
+#' 
+#' pwpm(warp.emm)
+#' 
+#' # use dot options to specify noninferiority tests
+#' pwpm(warp.emm, by = NULL, side = ">", delta = 5, adjust = "none")
+pwpm = function(emm, by, reverse = FALSE,
+                pvals = TRUE, means = TRUE, diffs = TRUE, 
+                flip = FALSE, digits, ...) {
+    if(missing(by)) 
+        by = emm@misc$by.vars
+    
+    emm = update(emm, by = by)
+    pri = paste(emm@misc$pri.vars, collapse = ":")
+    mns = confint(emm, ...)
+    mns$lbls = do.call(paste, c(unname(mns[attr(mns, "pri.vars")]), sep = get_emm_option("sep")))
+    estName = attr(mns, "estName")
+    prs = test(pairs(emm, reverse = reverse, ...), ...)
+    diffName = attr(prs, "estName")
+    null.hyp = "0"
+    if (!reverse) 
+        trifcn = lower.tri
+    else {
+        flip = !flip
+        trifcn = upper.tri
+    }
+    
+    if (!is.null(prs$null)) {
+        null.hyp = as.character(signif(unique(prs$null), digits = 5))
+        if (length(null.hyp) > 1)
+            null.hyp = "(various values)"
+    }
+    mby = .find.by.rows(mns, by)
+    pby = .find.by.rows(prs, by)
+
+    
+    if(opt.dig <- missing(digits)) {
+        tmp = mns[[estName]] + mns[["SE"]] * cbind(rep(-2, nrow(mns)), 0, 2)
+        digits = max(apply(tmp, 1, .opt.dig))
+        opt.dig = TRUE
+    }
+
+    result = lapply(seq_along(mby), function(i) {
+        if(opt.dig) {
+            pv = prs$p.value[pby[[i]]]
+            fpv = sprintf("%6.4f", pv) 
+            fpv[pv < 0.0001] = "<.0001"
+        }
+        else
+            fpv = format(prs$p.value[pby[[i]]], digits = digits)
+        fmn = format(mns[mby[[i]], estName], digits = digits)
+        fdiff = format(prs[pby[[i]], diffName], digits = digits) 
+        
+        lbls = mns$lbls[mby[[i]]]
+        n = length(lbls)
+        mat = matrix("", nrow = n, ncol = n, dimnames = list(lbls, lbls))
+        if(pvals) {
+            mat[trifcn(mat)] = fpv
+            mat = t(mat)
+        }
+        if (diffs)
+            mat[trifcn(mat)] = fdiff
+        if (means)
+            diag(mat) = fmn
+        else { # trim off empty row and col
+            idx = seq_len(n - 1)
+            if (pvals && !diffs)
+                mat = mat[idx, 1 + idx]
+            if (!pvals && diffs)
+                mat = mat[1 + idx, idx]
+        }
+        if (flip) t(mat)
+        else mat
+    })
+    if (reverse) 
+        flip = !flip
+    names(result) = paste(paste(by, collapse = ", "), "=", names(mby))
+    if (length(result) == 1)
+        result = result[[1]]
+    class(result) = c("pwpm", "list")
+    attr(result, "parms") = c(pvals = pvals, diffs = diffs, means = means, pri = pri,
+            estName = estName, diffName = diffName, reverse = reverse, flip = flip,
+            type = attr(mns, "type"), adjust = attr(prs, "adjust"),
+            side = attr(prs, "side"), delta = attr(prs, "delta"),
+            null = null.hyp)
+    result
+}
+
+#' @export
+print.pwpm = function(x, ...) {
+    parms = attr(x, "parms")
+    attr(x, "class") = attr(x, "parms") = NULL
+    if ((islist <- !is.matrix(x)))
+        entries = seq_along(x)
+    else {
+        entries = 1
+        m = x 
+    }
+
+    for (i in entries) {
+        if (islist) {
+            cat(paste0("\n", names(x)[i], "\n"))
+            m = x[[i]]
+        }
+        if (parms["means"])
+            diag(m) = paste0("[", diag(m), "]")
+        print(m, quote = FALSE, right = TRUE, na.print = "nonEst")
+    }
+    
+    # print a parm and its name if present unless it's in excl
+    # optional subst is NAMED vector where each possibilitty MUST be present
+    catparm = function(f, excl = "0", delim = "  ", quote = TRUE, subst) {
+        if(!is.na(pf <- parms[f]) && !(pf %in% excl)) {
+            if (!missing(subst)) pf = subst[pf]
+            if (quote) pf = dQuote(pf)
+            cat(paste0(delim, f, " = ", pf))
+        }
+    }
+    cat(paste0("\nRow and column labels: ", parms["pri"], "\n"))
+    if (parms["pvals"]) {
+        cat(paste0(ifelse(parms["flip"], "Lower", "Upper"), " triangle: P values "))
+        catparm("null", quote = FALSE)
+        catparm("side", subst = c("-1" = "<", "1" = ">"))
+        catparm("delta", quote = FALSE)
+        catparm("adjust", "none")
+        cat("\n")
+    }
+    if (parms["means"]) {
+        cat(paste0("Diagonal: [Estimates] (", parms["estName"], ") "))
+        catparm("type", "link")
+        cat("\n")
+    }
+    if (parms["diffs"]) {
+        cat(paste0(ifelse(parms["flip"], "Upper", "Lower"), " triangle: Comparisons (",
+                   parms["diffName"], ")   "))
+        if (parms["reverse"]) cat("later vs. earlier\n")
+        else cat("earlier vs. later\n")
+    }
+    invisible(x)
+}
+    
 

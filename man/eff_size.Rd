@@ -7,8 +7,12 @@
 eff_size(object, sigma, edf, method = "pairwise", ...)
 }
 \arguments{
-\item{object}{an \code{\link[=emmGrid-class]{emmGrid}} object, typically one defining the EMMs to 
-be contrasted.}
+\item{object}{an \code{\link[=emmGrid-class]{emmGrid}} object, 
+typically one defining the EMMs to 
+be contrasted. If instead, \code{class(object) == "emm_list"},
+such as is produced by \code{emmeans(model, pairwise ~ treatment)},
+a message is displayed; the contrasts already therein are used; and 
+\code{method} is replaced by \code{"identity"}.}
 
 \item{sigma}{numeric scalar, value of the population SD.}
 
@@ -22,6 +26,8 @@ to specify the degrees of freedom to use in \eqn{t} statistics and confidence in
 \item{method}{the contrast method to use to define the effects.
 This is passed to \code{\link{contrast}} after the elements of \code{object}
 are scaled.}
+
+\item{...}{Additional arguments passed to \code{contrast}}
 }
 \value{
 an \code{\link[=emmGrid-class]{emmGrid}} object containing the effect sizes
@@ -39,9 +45,9 @@ effects, unless overridden in the optional arguments.
 
 For models having a single random effect, such as those fitted using
 \code{\link{lm}}; in that case, the \code{stats::sigma} and
-\code{stats::df.residual} functions may be useful for spcifying \code{sigma}
+\code{stats::df.residual} functions may be useful for specifying \code{sigma}
 and \code{edf}. For models with more than one random effect, \code{sigma} may
-be based on some combination of the random-effect variances.
+be based on some combination of the random-effect variances. 
 
 Specifying \code{edf} can be rather unintuitive but is also relatively
 uncritical; but the smaller the value, the wider the confidence intervals for

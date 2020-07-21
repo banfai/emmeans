@@ -114,6 +114,7 @@ emmeans.list = function(object, specs, ...) {
 #'   \code{specs} is a formula.
 #' @param options If non-\code{NULL}, a named \code{list} of arguments to pass
 #'   to \code{\link{update.emmGrid}}, just after the object is constructed.
+#'   (Options may also be included in \code{...}.)
 #' @param weights Character value, numeric vector, or numeric matrix specifying
 #'   weights to use in averaging predictions. See \dQuote{Weights} section below.
 #' @param offset Numeric vector or scalar. If specified, this adds an offset to
@@ -121,7 +122,7 @@ emmeans.list = function(object, specs, ...) {
 #'   reference grid. If a vector of length differing from the number of rows in 
 #'   the result, it is subsetted or cyclically recycled.
 #' @param trend This is now deprecated. Use \code{\link{emtrends}} instead.
-#' @param ... This is used only when \code{object} is not already a \code{"emmGrid"}
+#' @param ... When \code{object} is not already a \code{"emmGrid"}
 #'   object, these arguments are passed to \code{\link{ref_grid}}. Common
 #'   examples are \code{at}, \code{cov.reduce}, \code{data}, code{type}, 
 #'   \code{transform}, \code{df}, \code{nesting}, and \code{vcov.}.
@@ -130,6 +131,20 @@ emmeans.list = function(object, specs, ...) {
 #'   \code{mode}, may be used here as well. In addition, if the model formula
 #'   contains references to variables that are not predictors, you must provide
 #'   a \code{params} argument with a list of their names.
+#'   
+#'   Arguments that could go in \code{options} may instead be included in \code{...},
+#'   typically, arguments such as \code{type}, \code{infer}, etc. that in essence
+#'   are passed to \code{\link{summary.emmGrid}}. Arguments in both places are 
+#'   overridden by the ones in \code{...}.
+#'   
+#'   There is a danger that \code{...} arguments could partially match those used
+#'   by both \code{ref_grid} and \code{update.emmGrid}, creating a conflict.
+#'   If these occur, usually they can be resolved by providing complete (or at least 
+#'   longer) argument names; or by isolating non-\code{ref_grid} arguments in
+#'   \code{options}; or by calling \code{ref_grid} separately and passing the
+#'   result as \code{object}. See a not-run example below.
+#' @param tran Placeholder to prevent it from being included in \code{...}.
+#'   If non-missing, it is added to `options`
 #'   
 #' @return   When \code{specs} is a \code{character} vector or one-sided formula,
 #'   an object of class \code{"emmGrid"}. A number of methods
@@ -229,19 +244,31 @@ emmeans.list = function(object, specs, ...) {
 #'   # the same offset for each wool.
 #'   # But using the same offsets with ~ wool | tension will probably not
 #'   # be what you want because the ordering of combinations is different.
+#'   
+#'   ### Conflicting arguments...
+#'   # This will error because 'tran' is passed to both ref_grid and update
+#'   emmeans(some.model, "treatment", tran = "log", type = "response")
+#'   
+#'   # Use this if the response was a variable that is the log of some other variable
+#'   # (Keep 'tran' from being passed to ref_grid)
+#'   emmeans(some.model, "treatment", options = list(tran = "log"), type = "response")
+#'   
+#'   # This will re-grid the result as if the response had been log-transformed
+#'   # ('transform' is passed only to ref_grid, not to update)
+#'   emmeans(some.model, "treatment", transform = "log", type = "response")
 #' }
 emmeans = function(object, specs, by = NULL, 
                    fac.reduce = function(coefs) apply(coefs, 2, mean), 
                    contr, options = get_emm_option("emmeans"), 
-                   weights, offset, trend, ...) {
+                   weights, offset, trend, ..., tran) {
     
     if(!is(object, "emmGrid")) {
         object = ref_grid(object, ...)
     }
-    options$type = list(...)$type  # note type if in ...
     if (is.list(specs)) {
         return (emmeans.list(object, specs, by = by, 
-                             contr = contr, weights = weights, ...))
+                             contr = contr, weights = weights, 
+                             offset = offset, trend = trend, ...))
     }
     if (inherits(specs, "formula")) {
         spc = .parse.by.formula(specs)
@@ -255,6 +282,13 @@ emmeans = function(object, specs, by = NULL,
     if (!missing(trend)) {
         stop("The 'trend' argument has been deprecated. Use 'emtrends()' instead.")
     }
+    if (!missing(tran)) {
+        options $tran = tran
+    }
+    
+    # This was added in 1.47, but causes problems
+    # if((length(specs) == 1) && (specs == "1"))
+    #     specs = character(0)
     
     if(is.null(nesting <- object@model.info$nesting)) 
         {
@@ -276,11 +310,12 @@ emmeans = function(object, specs, by = NULL,
         if(any(ord != seq_along(ord)))
             RG = RG[ord]
         
-        if ((length(facs) == 1) && (facs == "1")) {  ### just want grand mean
+        # xxx if ((length(facs) == 1) && (facs == "1")) {  ### just want grand mean
+        if("1" %in% facs) {
             RG@levels[["1"]] = "overall"
             RG@grid[ ,"1"] = 1
         }
-        
+
         
         # Figure out the structure of the grid
         wgt = RG@grid[[".wgt."]]
@@ -406,11 +441,7 @@ emmeans = function(object, specs, by = NULL,
         result@levels = levs
         result@grid = combs
         
-        
-        if(!is.null(options)) {
-            options$object = result
-            result = do.call("update.emmGrid", options)
-        }
+        result = .update.options(result, options, ...)
     }
     
     else {  # handle a nested structure
@@ -421,15 +452,12 @@ emmeans = function(object, specs, by = NULL,
     
 
     if(!missing(contr)) { # return a list with emmeans and contrasts
-        if (is.character(contr) && contr == "cld") {
-        # TO DO: provide for passing dots to cld                
-            #xxxx return(cld(result, by = by))
-            stop("`cld` in formula specs has been deprecated.\n",
-                 "To obtain a compact letter display, first call `emmeans()`,\n",
-                 "then call `CLD()` on the result.")
-        }
         args = list(...)
-        args$data = NULL   # ensure 'data' not passed
+        # NULL-out a bunch of arguments to not pass. 
+        dontpass = c("data", "avgd.over", "by.vars", "df", "initMesg", "estName", "estType",
+                     "famSize", "inv.lbl", "methDesc", "nesting", "pri.vars", 
+                     "tran", "tran.mult", "tran.offset", "tran2", "type", "is.new.rg")
+        args[!is.na(pmatch(names(args), dontpass))] = NULL
         args$object = result
         args$method = contr
         args$by = by
@@ -514,7 +542,7 @@ emmeans = function(object, specs, by = NULL,
 #' ( dose.emm <- emmeans(expt.rg, "dose") )
 #' 
 #' rbind(pairs(trt.emm), pairs(dose.emm), adjust = "mvt")
-emmobj = function(bhat, V, levels, linfct, df = NA, dffun, dfargs = list(), 
+emmobj = function(bhat, V, levels, linfct = diag(length(bhat)), df = NA, dffun, dfargs = list(), 
                   post.beta = matrix(NA), ...) {
     if ((nrow(V) != ncol(V)) || (nrow(V) != ncol(linfct)) || (length(bhat) != ncol(linfct)))
         stop("bhat, V, and linfct are incompatible")
@@ -571,6 +599,9 @@ emmobj = function(bhat, V, levels, linfct, df = NA, dffun, dfargs = list(),
 #'   argument is ignored in \code{as.list.emmGrid}
 #'   
 #' @return \code{as.emmGrid} returns an object of class \code{emmGrid}. 
+#'     However, in fact, both \code{as.emmGrid} and \code{as.emm_list} check for an
+#'     attribute in \code{object} to decide whether to return an \code{emmGrid} 
+#'     or \code{emm_list)} object.
 #' 
 #' @seealso \code{\link{emmobj}}
 #' @export
@@ -599,8 +630,12 @@ as.emmGrid = function(object, ...) {
             object$misc$is.new.rg = (cls == "ref.grid")
     }
     # above keeps us from having to define these classes in emmeans
-    if (is.list(object))
-        result = do.call(emmobj, object)
+    if (is.list(object)) {
+        if (!is.null(attr(object, "emm_list")))
+            return(as.emm_list(object))
+        else
+            result = do.call(emmobj, object)
+    }
     else {
         result = try(as(object, "emmGrid", strict = FALSE), silent = TRUE)
         if (inherits(result, "try-error"))
@@ -610,6 +645,7 @@ as.emmGrid = function(object, ...) {
 }
 
 #' @rdname as.emmGrid
+#' @order 2
 #' @param x An \code{emmGrid} object
 #' @return \code{as.list.emmGrid} returns an object of class \code{list}. 
 #' @method as.list emmGrid
@@ -646,7 +682,8 @@ as.list.emmGrid = function(x, ...) {
     tmp = lapply(rev(names(levels)), function(nm) {
         x = grid[[nm]]
         if (inherits(x, "factor")) as.integer(x)
-        else as.integer(factor(x, levels = levels[[nm]]))
+        else as.integer(factor(x, levels = as.character(levels[[nm]])))
+        # Note: need as.character(levels) here so we handle such as Date vectors correctly
     })
     do.call(order, tmp)
 }

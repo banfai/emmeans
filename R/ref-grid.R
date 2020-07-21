@@ -1,5 +1,5 @@
 ##############################################################################
-#    Copyright (c) 2012-2017 Russell V. Lenth                                #
+#    Copyright (c) 2012-2020 Russell V. Lenth                                #
 #                                                                            #
 #    This file is part of the emmeans package for R (*emmeans*)              #
 #                                                                            #
@@ -56,9 +56,14 @@
 #'   \href{../doc/models.html}{\code{vignette("models", "emmeans")}}.
 #' @param at Optional named list of levels for the corresponding variables
 #' @param cov.reduce A function, logical value, or formula; or a named list of
-#'   these. Each covariate \emph{not} specified in \code{at} is reduced
-#'   according to these specifications. See the section below on \dQuote{Using
-#'   \code{cov.reduce}}.
+#'   these. Each covariate \emph{not} specified in \code{cov.keep} or \code{at}
+#'   is reduced according to these specifications. See the section below on
+#'   \dQuote{Using \code{cov.reduce} and \code{cov.keep}}.
+#' @param cov.keep Character vector: names of covariates that are \emph{not}
+#'   to be reduced; these are treated as factors and used in weighting calculations.
+#'   \code{cov.keep} may also include integer value(s), and if so, the maximum
+#'   of these is used to set a threshold such that any covariate having no more
+#'   than that many unique values is automatically included in \code{cov.keep}.
 #' @param mult.names Character value: the name(s) to give to the
 #'   pseudo-factor(s) whose levels delineate the elements of a multivariate
 #'   response. If this is provided, it overrides the default name(s) used for
@@ -80,7 +85,7 @@
 #' @param type Character value. If provided, this is saved as the
 #'   \code{"predict.type"} setting. See \code{\link{update.emmGrid}} and the
 #'   section below on prediction types and transformations.
-#' @param transform Character value. If other than \code{"none"}, the reference
+#' @param transform Character, logical, or list. If non-missing, the reference
 #'   grid is reconstructed via \code{\link{regrid}} with the given
 #'   \code{transform} argument. See the section below on prediction types and
 #'   transformations.
@@ -89,11 +94,6 @@
 #'   structure. Specifying \code{nesting} overrides any nesting structure that
 #'   is automatically detected. See the section below on Recovering or Overriding 
 #'   Model Information.
-#' @param covnest Logical value. If \code{TRUE}, covariates having more than one
-#'   value in the reference grid are included when determining weights and
-#'   in auto-detecting nesting. Older versions of \pkg{emmeans} did not do this,
-#'   and the main justification for setting \code{covnest = FALSE} is to
-#'   replicate past results.
 #' @param offset Numeric scalar value (if a vector, only the first element is
 #'   used). This may be used to add an offset, or override offsets based on the
 #'   model. A common usage would be to specify \code{offset = 0} for a Poisson
@@ -102,25 +102,38 @@
 #' @param sigma Numeric value to use for subsequent predictions or
 #'   back-transformation bias adjustments. If not specified, we use
 #'   \code{sigma(object)}, if available, and \code{NULL} otherwise.
-#' @param ... Optional arguments passed to \code{\link{emm_basis}}, and
+#' @param ... Optional arguments passed to \code{\link{summary.emmGrid}},
+#'   \code{\link{emm_basis}}, and
 #'   \code{\link{recover_data}}, such as \code{params}, \code{vcov.} (see
 #'   \bold{Covariance matrix} below), or options such as \code{mode} for
 #'   specific model types (see \href{../doc/models.html}{vignette("models",
 #'   "emmeans")}).
 #'
-#' @section Using \code{cov.reduce}: \code{cov.reduce} may be a function,
+#' @section Using \code{cov.reduce} and \code{cov.keep}: 
+#'   The \code{cov.keep} argument was not available in \pkg{emmeans} versions
+#'   1.4.1 and earlier. Any covariates named in this list are treated as if they
+#'   are factors: all the unique levels are kept in the reference grid. The user
+#'   may also specify an integer value, in which case any covariate having no more
+#'   than that number of unique values is implicitly included in \code{cov.keep}.
+#'   The default for \code{cove.keep} is set and retrieved via the 
+#'   \code{\link{emm_options}} framework, and the system default is \code{"2"},
+#'   meaning that covariates having only two unique values are automatically
+#'   treated as two-level factors. See also the Note below on backward compatibility.
+#'   
+#'   There is a subtle distinction between including a covariate in \code{cov.keep}
+#'   and specifying its values manually in \code{at}: Covariates included in 
+#'   \code{cov.keep} are treated as factors for purposes of weighting, while
+#'   specifying levels in \code{at} will not include the covariate in weighting.
+#'   See the \code{mtcars.lm} example below for an illustration.
+#'   
+#'   \code{cov.reduce} may be a function,
 #'   logical value, formula, or a named list of these.
-#'
 #'   If a single function, it is applied to each covariate.
-#'
 #'   If logical and \code{TRUE}, \code{mean} is used. If logical and
-#'   \code{FALSE}, it is equivalent to specifying \samp{function(x)
-#'   sort(unique(x))}, and these values are considered part of the reference
-#'   grid; thus, it is a handy alternative to specifying these same values in
-#'   \code{at}. That said, a typical covariate has more than a handful
-#'   of unique values, and in that situation, \code{cov.reduce = FALSE}
-#'   will create a large, messy reference grid, and likely spurious nesting
-#'   as well.
+#'   \code{FALSE}, it is equivalent to including all covariates in
+#'   \code{cov.keep}. Use of \samp{cov.reduce = FALSE} is inadvisable because it
+#'   can result in a huge reference grid; it is far better to use
+#'   \code{cov.keep}.
 #'
 #'   If a formula (which must be two-sided), then a model is fitted to that
 #'   formula using \code{\link{lm}}; then in the reference grid, its response
@@ -135,9 +148,10 @@
 #'   formulas' left-hand sides.) Any unresolved covariates are reduced using
 #'   \code{"mean"}.
 #'
-#'   Any \code{cov.reduce} specification for a covariate also named in \code{at}
-#'   is ignored.
-#'
+#'   Any \code{cov.reduce} of \code{cov.keep} specification for a covariate 
+#'   also named in \code{at} is ignored.
+#'   
+#'   
 #' @section Interdependent covariates: Care must be taken when covariate values
 #'   depend on one another. For example, when a polynomial model was fitted
 #'   using predictors \code{x}, \code{x2} (equal to \code{x^2}), and \code{x3}
@@ -202,13 +216,6 @@
 #'   "country", city = c("state", "country")}, \code{nesting = "state \%in\%
 #'   country, city \%in\% (state*country)"}, and \code{nesting = c("state \%in\%
 #'   country", "city \%in\% state*country")}.
-#'
-#'   In certain unusual cases, a covariate (rather than a factor) may be nested.
-#'   Support for such situations is limited to the extent that only covariate
-#'   values that exactly match a value in the dataset is permitted. I recommend
-#'   supplying a reference dataset in the \code{data} argument that contains the
-#'   desired covariate values for the reference grid; then the nesting will be
-#'   handled correctly provided \code{cov.reduce = FALSE} and \code{covnest = TRUE}.
 #'
 #' @section Predictors with subscripts and data-set references: When the fitted
 #'   model contains subscripts or explicit references to data sets, the
@@ -275,6 +282,19 @@
 #'   \code{\link{summary.emmGrid}}. Reference grids are fundamental to
 #'   \code{\link{emmeans}}. Supported models are detailed in
 #'   \href{../doc/models.html}{\code{vignette("models", "emmeans")}}.
+#'   See \code{\link{update.emmGrid}} for details of arguments that can be in 
+#'   \code{options} (or in \code{...}).
+#'   
+#' @note The system default for \code{cov.keep} causes models
+#'   containing indicator variables to be handled differently than in
+#'   \pkg{emmeans} version 1.4.1 or earlier. To replicate older
+#'   analyses, change the default via 
+#'   \samp{emm_options(cov.keep = character(0))}.
+#'   
+#' @note Some earlier versions of \pkg{emmeans} offer a \code{covnest} argument.
+#'   This is now obsolete; if \code{covnest} is specified, it is harmlessly
+#'   ignored. Cases where it was needed are now handled appropriately via the
+#'   code associated with \code{cov.keep}.
 #'
 #' @export
 #'
@@ -294,6 +314,16 @@
 #' # If we thought that the machines affect the diameters
 #' # (admittedly not plausible in this example), then we should use:
 #' ref_grid(fiber.lm, cov.reduce = diameter ~ machine)
+#' 
+#' ### Model with indicator variables as predictors:
+#' mtcars.lm <- lm(mpg ~ disp + wt + vs * am, data = mtcars)
+#' (rg.default <- ref_grid(mtcars.lm))
+#' (rg.nokeep <- ref_grid(mtcars.lm, cov.keep = character(0)))
+#' (rg.at <- ref_grid(mtcars.lm, at = list(vs = 0:1, am = 0:1)))
+#' 
+#' # Two of these have the same grid but different weights:
+#' rg.default@grid
+#' rg.at@grid
 #'
 #' # Multivariate example
 #' MOats.lm = lm(yield ~ Block + Variety, data = MOats)
@@ -301,12 +331,19 @@
 #' # Silly illustration of how to use 'mult.levs' to make comb's of two factors
 #' ref_grid(MOats.lm, mult.levs = list(T=LETTERS[1:2], U=letters[1:2]))
 #' 
-ref_grid <- function(object, at, cov.reduce = mean, mult.names, mult.levs, 
+#' # Using 'params'
+#' require("splines")
+#' my.knots = c(2.5, 3, 3.5)
+#' mod = lm(Sepal.Length ~ Species * ns(Sepal.Width, knots = my.knots), data = iris)
+#' ## my.knots is not a predictor, so need to name it in 'params'
+#' ref_grid(mod, params = "my.knots") 
+#' 
+ref_grid <- function(object, at, cov.reduce = mean, cov.keep = get_emm_option("cov.keep"),
+                     mult.names, mult.levs, 
                      options = get_emm_option("ref_grid"), data, df, type, 
-                     transform = c("none", "response", "mu", "unlink", "log"), 
-                     nesting, covnest = TRUE, offset, sigma, ...) 
+                     transform, nesting, offset, sigma, ...) 
 {
-    transform = match.arg(transform)
+    ### transform = match.arg(transform)
     if (!missing(df)) {
         if(is.null(options)) options = list()
         options$df = df
@@ -343,14 +380,23 @@ ref_grid <- function(object, at, cov.reduce = mean, mult.names, mult.levs,
     # convenience function
     sort.unique = function(x) sort(unique(x))
     
+    # Get threshold for max #levels to keep a covariate
+    if (is.null(cov.keep))
+        cov.keep = character(0)
+    cov.thresh = max(c(1, suppressWarnings(as.integer(cov.keep))), na.rm = TRUE)
+    if (is.logical(cov.reduce)) {
+        if (!cov.reduce)
+            cov.thresh = 99 # big enough!
+        cov.reduce = mean
+    }
+    
+    
+    
+    
     # Ensure cov.reduce is a function or list thereof
     dep.x = list() # list of formulas to fit later
     fix.cr = function(cvr) {
-        # cvr is TRUE or FALSE
-        if(is.logical(cvr)) 
-            if(cvr[1]) cvr = mean
-        else              cvr = sort.unique
-        else if (inherits(cvr, "formula")) {
+        if (inherits(cvr, "formula")) {
             if (length(cvr) < 3)
                 stop("Formulas in 'cov.reduce' must be two-sided")
             lhs = .all.vars(cvr)[1]
@@ -403,6 +449,8 @@ ref_grid <- function(object, at, cov.reduce = mean, mult.names, mult.levs,
         if (is.factor(x) && !(nm %in% coerced$covariates))
             xlev[[nm]] = levels(factor(x))
             # (applying factor drops any unused levels)
+        else if (is.character(x)) # just like a factor
+            xlev[[nm]] = sort(unique(x))
     
         # Now go thru and find reference levels...
         # mentioned in 'at' list but not coerced factor
@@ -428,9 +476,15 @@ ref_grid <- function(object, at, cov.reduce = mean, mult.names, mult.levs,
             if (nm %in% coerced$factors)            
                 ref.levels[[nm]] = sort.unique(x)
             
-            # Ordinary covariates - summarize
-            else 
-                ref.levels[[nm]] = cr(as.numeric(x), nm)
+            # Ordinary covariates - summarize based on cov.keep
+            else {
+                if ((length(uval <- sort.unique(x)) > cov.thresh) && !(nm %in% cov.keep))
+                    ref.levels[[nm]] = cr(as.numeric(x), nm)
+                else {
+                    ref.levels[[nm]] = uval
+                    cov.keep = c(cov.keep, nm)
+                }
+            }
         }
     }
     
@@ -472,8 +526,8 @@ ref_grid <- function(object, at, cov.reduce = mean, mult.names, mult.levs,
     # we've added args `misc` and `options` so emm_basis methods can access and use these if they want
     basis = emm_basis(object, trms, xlev, grid, misc = attr(data, "misc"), options = options, ...)
     if(length(basis$bhat) != ncol(basis$X))
-        stop("Non-conformable elements in reference grid.\n",
-             " Probably due to rank deficiency not handled as expected.",
+        stop("Something went wrong:\n",
+             " Non-conformable elements in reference grid.",
              call. = TRUE)
     
     misc = basis$misc
@@ -482,14 +536,29 @@ ref_grid <- function(object, at, cov.reduce = mean, mult.names, mult.levs,
     # next stmt assumes that model formula is 1st argument (2nd element) in call.
     # if not, we probably get an error or something that isn't a formula
     # and it is silently ignored
-    lhs = try(eval(attr(data, "call")[[2]][-3]), silent = TRUE)
+    lhs = try(eval(as.formula(attr(data, "call")[[2]])[-3]), silent = TRUE)
     if (inherits(lhs, "formula")) { # response may be transformed
         tran = setdiff(.all.vars(lhs, functions = TRUE), c(.all.vars(lhs), "~", "cbind", "+", "-", "*", "/", "^", "%%", "%/%"))
         if(length(tran) > 0) {
-            if (tran == "linkfun")
-                tran = as.list(environment(trms))
+            if (tran[1] == "scale") { # we'll try to set it up based on terms component
+                pv = try(attr(terms(object), "predvars"), silent = TRUE)
+                if (!inherits(pv, "try-error")) {
+                    pv = c(lapply(pv, as.character), "foo") # make sure it isn't empty
+                    scal = which(sapply(pv, function(x) x[1] == "scale"))
+                    if(length(scal) > 0) {
+                        par = as.numeric(pv[[scal[1]]][3:4]) 
+                        tran = make.tran("scale", y = 0, center = par[1], scale = par[2])
+                    }
+                }
+                if (is.character(tran)) { # didn't manage to find params
+                    tran = NULL
+                    message("NOTE: Unable to recover scale() parameters. See '? make.tran'")
+                }
+            }
+            else if (tran[1] == "linkfun")
+                tran = as.list(environment(trms))[c("linkfun","linkinv","mu.eta","valideta","name")]
             else {
-                if (tran == "I") 
+                if (tran[1] == "I") 
                     tran = "identity"
                 tran = paste(tran, collapse = ".")  
                 # length > 1: Almost certainly unsupported, but facilitates a more informative error message
@@ -507,7 +576,7 @@ ref_grid <- function(object, at, cov.reduce = mean, mult.names, mult.levs,
                 }
                 
                 # look for added constant, e.g. log(y + 1)
-                tst = strsplit(as.character(lhs)[2], "\\(|\\)|\\+")[[1]]
+                tst = strsplit(as.character(lhs[2]), "\\(|\\)|\\+")[[1]]
                 if (length(tst) > 2) {
                     const = try(eval(parse(text = tst[3])), silent = TRUE)
                     if (!inherits(const, "try-error") && (length(tst) == 3))
@@ -596,13 +665,16 @@ ref_grid <- function(object, at, cov.reduce = mean, mult.names, mult.levs,
             grid[[".offset."]] = om * .get.offset(trms, grid)
     }
 
-    ### --- Determine weights for each grid point --- (added ver.2.11), updated ver.2.14 to include weights
+    ### --- Determine weights for each grid point
     if (!hasName(data, "(weights)"))
         data[["(weights)"]] = 1
-    if (!covnest)
-        nms = union(union(names(xlev), names(chrlev)), coerced$factors) # only factors, no covariates or mult.resp
-    else
-        nms = setdiff(names(ref.levels)[sapply(ref.levels, length) > 1], multresp) # all names (except multiv) for which there is > 1 level
+    cov.keep = intersect(unique(cov.keep), names(ref.levels))
+    nms = union(union(union(names(xlev), names(chrlev)), coerced$factors), cov.keep)
+    #### Old code...
+    # if (!covnest)
+    #     nms = union(union(names(xlev), names(chrlev)), coerced$factors) # only factors, no covariates or mult.resp
+    # else
+    #     nms = setdiff(names(ref.levels)[sapply(ref.levels, length) > 1], multresp) # all names (except multiv) for which there is > 1 level
     if (length(nms) == 0)
         wgt = rep(1, nrow(grid))  # all covariates; give each weight 1
     else {
@@ -686,18 +758,15 @@ ref_grid <- function(object, at, cov.reduce = mean, mult.names, mult.levs,
                     "fitted model:\n    ", .fmt.nest(nst))
     }
 
-    if(!is.null(options)) {
-        options$object = result
-        result = do.call("update.emmGrid", options)
-    }
+    result = .update.options(result, options, ...)
 
     if(!is.null(hook <- misc$postGridHook)) {
         if (is.character(hook))
             hook = get(hook)
         result@misc$postGridHook = NULL
-        result = hook(result)
+        result = hook(result, ...)
     }
-    if(transform != "none")
+    if(!missing(transform))
         result = regrid(result, transform = transform, sigma = sigma, ...)
     
     .save.ref_grid(result)

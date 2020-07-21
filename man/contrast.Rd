@@ -9,10 +9,10 @@
 \usage{
 contrast(object, ...)
 
-\method{contrast}{emmGrid}(object, method = "eff", interaction = FALSE,
-  by, offset = NULL, scale = NULL, name = "contrast",
+\method{contrast}{emmGrid}(object, method = "eff", interaction = FALSE, by,
+  offset = NULL, scale = NULL, name = "contrast",
   options = get_emm_option("contrast"), type, adjust, simple,
-  combine = FALSE, ratios = TRUE, ...)
+  combine = FALSE, ratios = TRUE, parens, ...)
 
 \method{pairs}{emmGrid}(x, reverse = FALSE, ...)
 
@@ -67,12 +67,20 @@ handled. These transformations are exceptional cases in that there is a
 valid way to back-transform contrasts: differences of logs are logs of
 ratios, and differences of logits are odds ratios. If \code{ratios = TRUE}
 and summarized with \code{type = "response"}, \code{contrast} results are
-back-trajnsformed to ratios whenever we have true contrasts (coefficients
+back-transformed to ratios whenever we have true contrasts (coefficients
 sum to zero). For other transformations, there is no natural way to
 back-transform contrasts, so even when summarized with \code{type = "response"},
-contrasts are computed and displayed on the transformed scale. Similarly, 
+contrasts are computed and displayed on the linear-predictor scale. Similarly, 
 if \code{ratios = FALSE}, log and logit transforms are treated in the same way as
 any other transformation.}
+
+\item{parens}{character or \code{NULL}. If a character value, the labels for levels
+being contrasted are parenthesized if they match the regular expression in 
+\code{parens[1]} (via \code{\link{grep}}). The default is \code{emm_option("parens")}.
+Optionally, \code{parens} may contain second and third elements specifying
+what to use for left and right parentheses (default \code{"("} and \code{")"}).
+Specify \code{parens = NULL} or \code{parens = "a^"} (which won't match anything)
+to disable all parenthesization.}
 
 \item{x}{An \code{emmGrid} object}
 

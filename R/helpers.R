@@ -103,8 +103,12 @@ recover_data.merMod = function(object, ...) {
 
 #' @export
 emm_basis.merMod = function(object, trms, xlev, grid, vcov., 
-                            mode = get_emm_option("lmer.df"), 
-                            lmer.df, options, ...) {
+                            mode = get_emm_option("lmer.df"), lmer.df, 
+                            disable.pbkrtest = get_emm_option("disable.pbkrtest"), 
+                            pbkrtest.limit = get_emm_option("pbkrtest.limit"), 
+                            disable.lmerTest = get_emm_option("disable.lmerTest"), 
+                            lmerTest.limit = get_emm_option("lmerTest.limit"), 
+                            options, ...) {
     if (missing(vcov.))
         V = as.matrix(vcov(object, correlation = FALSE))
     else
@@ -117,37 +121,43 @@ emm_basis.merMod = function(object, trms, xlev, grid, vcov.,
             mode = lmer.df
 
         mode = match.arg(tolower(mode), c("satterthwaite", "kenward-roger", "asymptotic"))
-        if (!is.null(options$df)) # if we're gonna override the df anyway, keep it simple!
+        # if we're gonna override the df anyway, keep it simple 
+        # OTOH, if K-R, documentation promises we'll adjust V
+        if (!is.null(options$df) && (mode != "kenward-roger")) 
             mode = "asymptotic"
         
         
         # set flags
         objN = lme4::getME(object, "N")
-        disable.pbkrtest = get_emm_option("disable.pbkrtest")
-        tooBig.k = (objN > get_emm_option("pbkrtest.limit"))
-        disable.lmerTest = get_emm_option("disable.lmerTest")
-        tooBig.s = (objN > get_emm_option("lmerTest.limit"))
+        tooBig.k = (objN > pbkrtest.limit)
+        tooBig.s = (objN > lmerTest.limit)
         
         tooBigMsg = function(pkg, limit) {  
             message("Note: D.f. calculations have been",
                     " disabled because the number of observations exceeds ", limit, ".\n",
-                    "To enable adjustments, set emm_options(", pkg, ".limit = ", objN, ") or larger,\n",
+                    "To enable adjustments, add the argument '", pkg, ".limit = ", objN, "' (or larger)\n",
+                    "[or, globally, 'set emm_options(", pkg, ".limit = ", objN, ")' or larger];\n",
                     "but be warned that this may result in large computation time and memory use.")
         }
-        
+
         # pick the lowest-hanging apples first
         if (mode == "kenward-roger") {
-            if (disable.pbkrtest || tooBig.k || !.requireNS("pbkrtest", fail = .nothing))
+            if (disable.pbkrtest || tooBig.k || !.requireNS("pbkrtest", 
+                    "Cannot use mode = \"kenward-roger\" because *pbkrtest* package is not installed", 
+                    fail = message))
                 mode = "satterthwaite"
             if (!disable.pbkrtest && tooBig.k)
-                tooBigMsg("pbkrtest", get_emm_option("pbkrtest.limit"))
+                tooBigMsg("pbkrtest", pbkrtest.limit)
         }
         if (mode == "satterthwaite") {
-            if (disable.lmerTest || tooBig.s || !.requireNS("lmerTest", fail = .nothing))
-                mode = ifelse(!disable.pbkrtest && !tooBig.k && .requireNS("pbkrtest", fail = .nothing), 
+            if (disable.lmerTest || tooBig.s || !.requireNS("lmerTest", 
+                    "Cannot use mode = \"satterthwaite\" because *lmerTest* package is not installed", 
+                    fail = message))
+                mode = ifelse(!disable.pbkrtest && !tooBig.k && 
+                                  .requireNS("pbkrtest", fail = .nothing), 
                               "kenward-roger", "asymptotic")
             if (!disable.lmerTest && tooBig.s)
-                tooBigMsg("lmerTest", get_emm_option("lmerTest.limit"))
+                tooBigMsg("lmerTest", lmerTest.limit)
         }
         # if my logic isn't flawed, we are guaranteed that mode is both desired and possible
         
@@ -236,13 +246,14 @@ recover_data.lme = function(object, data, ...) {
 
 #' @export
 emm_basis.lme = function(object, trms, xlev, grid, 
-        mode = c("containment", "satterthwaite", "boot-satterthwaite", "auto"), 
+        mode = c("containment", "satterthwaite", "appx-satterthwaite", "auto", "boot-satterthwaite"), 
         sigmaAdjust = TRUE, options, ...) {
     mode = match.arg(mode)
+    if (mode == "boot-satterthwaite") mode = "appx-satterthwaite"  # backward compatibility
     if (!is.null(options$df)) # if we're gonna override the df anyway, keep it simple!
         mode = "fixed"
     if (mode == "auto")
-        mode = ifelse(is.null(object$apVar), "containment", "boot-satterthwaite")
+        mode = ifelse(is.null(object$apVar), "containment", "appx-satterthwaite")
     if (is.null(object$apVar))
         mode = "containment"
     contrasts = object$contrasts
@@ -262,7 +273,7 @@ emm_basis.lme = function(object, trms, xlev, grid,
         dfargs = list(df = options$df)
         dffun = function(k, dfargs) dfargs$df
     }
-    else if (mode %in% c("satterthwaite", "boot-satterthwaite")) {
+    else if (mode %in% c("satterthwaite", "appx-satterthwaite")) {
         G = try(gradV.kludge(object), silent = TRUE)
         ###! not yet, doesn't work G = try(lme_grad(object, object$call, object$data, V))
         if (inherits(G, "try-error"))
@@ -297,6 +308,14 @@ emm_basis.lme = function(object, trms, xlev, grid,
 # regressing the changes in V against the changes in the 
 # covariance parameters
 gradV.kludge = function(object, Vname = "varFix", call = object$call$fixed, data = object$data) {
+    # check consistency of contrasts
+    cnm = names(object$contrasts)
+    cdiff = sapply(cnm, function(.) max(abs(contrasts(data[[.]]) - object$contrasts[[.]])))
+    if (max(cdiff) > 1e-6) {
+        message("Contrasts don't match those used when the model was fitted. Fix this and re-run")
+        stop()
+    }
+    
     A = object$apVar
     theta = attr(A, "Pars")
     V = object[[Vname]]
@@ -344,7 +363,7 @@ gradV.kludge = function(object, Vname = "varFix", call = object$call$fixed, data
 
 #--------------------------------------------------------------
 
-### new way to get gradients for gls models
+### new way to get jacobians for gls models
 gls_grad = function(object, call, data, V) {
     obj = object$modelStruct
     conLin = object
@@ -356,55 +375,67 @@ gls_grad = function(object, call, data, V) {
     func = function(x) {
         obj = nlme::`coef<-`(obj, value = x)
         tmp = nlme::glsEstimate(obj, conLin)
-        crossprod(tmp$sigma * tmp$varBeta)
+        .get.lt(crossprod(tmp$sigma * tmp$varBeta))  # lower triangular form
     }
     res = numDeriv::jacobian(func, coef(obj))
-    G = lapply(seq_len(ncol(res)), function(j) matrix(res[, j], ncol = ncol(V)))
+    G = lapply(seq_len(ncol(res)), function(j) .lt2mat(res[, j]))
     G[[1 + length(G)]] = 2 * V  # gradient wrt log sigma
     G
 }
 
 ### gls objects (nlme package)
-recover_data.gls = function(object, ...) {
+recover_data.gls = function(object, data, ...) {
     fcall = object$call
-    if (!is.null(fcall$weights))
-        fcall$weights = nlme::varWeights(object$modelStruct)
+    if (!is.null(wts <- fcall$weights)) {
+        wts = nlme::varWeights(object$modelStruct)
+        fcall$weights = NULL
+    }
     trms = delete.response(terms(nlme::getCovariateFormula(object)))
-    recover_data(fcall, trms, object$na.action, ...)
+    result = recover_data.call(fcall, trms, object$na.action, data = data, ...)
+    if (!is.null(wts))
+        result[["(weights)"]] = wts
+    if (!missing(data))
+        attr(result, "misc") = list(data = data)
+    result
 }
 
 emm_basis.gls = function(object, trms, xlev, grid, 
-                         mode = c("auto", "df.error", "satterthwaite", "boot-satterthwaite"), 
-                         options, ...) {
+                         mode = c("auto", "df.error", "satterthwaite", "appx-satterthwaite", "boot-satterthwaite"), 
+                         options, misc, ...) {
     contrasts = object$contrasts
     m = model.frame(trms, grid, na.action = na.pass, xlev = xlev)
     X = model.matrix(trms, m, contrasts.arg = contrasts)
     bhat = coef(object)
     V = .my.vcov(object, ...)
     nbasis = estimability::all.estble
-    misc = list()
     mode = match.arg(mode)
+    if (mode == "boot-satterthwaite") mode = "appx-satterthwaite"  # backward compatibility
     if (!is.null(options$df)) # if we're gonna override the df anyway, keep it simple!
         mode = "df.error"
     if (mode == "auto")
         mode = ifelse(is.null(object$apVar), "df.error", "satterthwaite")
     if (!is.matrix(object$apVar))
         mode = "df.error"
-    if (mode %in% c("satterthwaite", "boot-satterthwaite")) {
+    if (mode %in% c("satterthwaite", "appx-satterthwaite")) {
+        data = if(is.null(misc$data))
+            eval(object$call$data, parent.frame(2))
+        else
+            misc$data
+        misc = list()
         chk = attr(object$apVar, "Pars")
         if(max(abs(coef(object$modelStruct) - chk[-length(chk)])) > .001) {
-            message("Analytical Satterthwaite method not available; using boot-satterthwaite")
-            mode = "boot-satterthwaite"
+            message("Analytical Satterthwaite method not available; using appx-satterthwaite")
+            mode = "appx-satterthwaite"
         }
-        if (mode == "boot-satterthwaite") {
+        if (mode == "appx-satterthwaite") {
             G = try(gradV.kludge(object, "varBeta", call = object$call,
-                                 data = eval(object$call$data)),
+                                 data = data),
                     silent = TRUE)
         }
         else
-            G = try(gls_grad(object, object$call, eval(object$call$data), V))
+            G = try(gls_grad(object, object$call, data, V))
         if (inherits(G, "try-error")) {
-            sugg = ifelse(mode == "satterthwaite", "boot-satterthwaite", "df.error")
+            sugg = ifelse(mode == "satterthwaite", "appx-satterthwaite", "df.error")
             stop("Can't estimate Satterthwaite parameters.\n",
                  "  Try adding the argument 'mode = \"", sugg, "\"'", call. = FALSE)
         }
@@ -464,7 +495,7 @@ emm_basis.polr = function(object, trms, xlev, grid,
             misc$postGridHook = ".clm.postGrid"
         }
     }
-    misc$respName = as.character(terms(object))[2]
+    misc$respName = as.character.default(terms(object))[2]
     nbasis = estimability::all.estble
     dffun = function(...) Inf
     list(X=X, bhat=bhat, nbasis=nbasis, V=V, dffun=dffun, dfargs=list(), misc=misc)
@@ -478,9 +509,9 @@ emm_basis.polr = function(object, trms, xlev, grid,
 recover_data.survreg = function(object, ...) {
     fcall = object$call
     trms = delete.response(terms(object))
-    # I'm gonna delete any terms involving strata(), cluster(), or frailty()
+    # I'm gonna delete any terms involving cluster(), or frailty() -- keep strata()
     mod.elts = dimnames(attr(trms, "factor"))[[2]]
-    tmp = grep("strata\\(|cluster\\(|frailty\\(", mod.elts)
+    tmp = grep("cluster\\(|frailty\\(", mod.elts)
     if (length(tmp))
         trms = trms[-tmp]
     recover_data(fcall, trms, object$na.action, ...)
@@ -492,9 +523,11 @@ recover_data.survreg = function(object, ...) {
 emm_basis.survreg = function(object, trms, xlev, grid, ...) {
     # Much of this code is adapted from predict.survreg
     bhat = object$coefficients
-    k = length(bhat)
+    k = length(bhat) - sum(is.na(bhat))
     V = .my.vcov(object, ...)[seq_len(k), seq_len(k), drop=FALSE]
     # ??? not used... is.fixeds = (k == ncol(object$var))
+    ### zap-out factors in xlev not needed by model.frame
+    xlev[setdiff(names(xlev), rownames(attr(trms, "factors")))] = NULL
     m = model.frame(trms, grid, na.action = na.pass, xlev = xlev)    
     # X = model.matrix(object, m) # This is what predict.survreg does
     # But I have manipulated trms, so need to make sure things are consistent
@@ -521,16 +554,18 @@ emm_basis.coxph = function (object, trms, xlev, grid, ...)
 {
     object$dist = "doesn't matter"
     result = emm_basis.survreg(object, trms, xlev, grid, ...)
-    result$dfargs$df = NA
-    result$X = result$X[, -1, drop = FALSE]
-    result$X = result$X - rep(object$means, each = nrow(result$X))
+    result$dfargs$df = Inf
+    nms = colnames(result$X)
+    # delete columns for intercept and main effects of strata
+    zaps = which(nms %in% setdiff(nms, names(result$bhat)))
+    result$X = result$X[, -zaps, drop = FALSE]
+    ### result$X = result$X - rep(object$means, each = nrow(result$X))
     result$misc$tran = "log"
     result$misc$inv.lbl = "hazard"
-    result$misc$postGridHook = .notran2   # removes "Surv()" as response transformation
     result
 }
 
-.notran2 = function(object) {
+.notran2 = function(object, ...) {
     for (nm in c("tran", "tran2"))
         if(!is.null(object@misc[[nm]]) && object@misc[[nm]] == "Surv") object@misc[[nm]] = NULL
     object

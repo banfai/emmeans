@@ -23,13 +23,15 @@ This vignette covers the intricacies of transformations and link functions in **
   5. [Special transformations](#special)
   6. [Specifying a transformation after the fact](#after)
   6. [Auto-detected transformations](#auto)
+  6. [Standardized response](#stdize)
   7. [Faking a log transformation](#logs)
+     a. [Faking other transformations](#faking)
   8. [Bias adjustment](#bias-adj)
   
 [Index of all vignette topics](vignette-topics.html) 
 
 ## Overview {#overview}
-<!-- @index Transformations!Overview -->
+<!-- @index Transformations!Overview; Examples!`pigs` -->
 Consider the same example with the `pigs` dataset that is used in many of 
 these vignettes:
 ```{r}
@@ -51,6 +53,9 @@ can be done by adding `type = "response"` to the `summary()` call:
 ```{r}
 summary(pigs.emm.s, infer = TRUE, null = log(35), type = "response")
 ```
+
+Note: Looking ahead, this output is compared later in this vignette with a 
+[bias-adjusted version](#pigs-biasadj).
 
 ### Timing is everything {#timing}
 <!-- @index Transformations!Timing is everything -->
@@ -268,7 +273,7 @@ with the required information:
 ```{r eval = FALSE}
 my.rg <- update(ref_grid(my.model), tran = make.tran("genlog", .5))
 ```
-Subsequently, use `my.rg` in place of `my.mnodel` in any `emmeans()` analyses,
+Subsequently, use `my.rg` in place of `my.model` in any `emmeans()` analyses,
 and the transformation information will be there.
 
 For standard transformations (those in `stats::make.link()`), just give the name
@@ -316,6 +321,101 @@ confidence intervals [above](#timing) for the EMMs and the [pairwise ratios in
 the "comparisons" vignette](comparisons.html#logs), where the fitted model
 actually used a log response.
 
+### Faking other transformations {#faking}
+<!-- @index Transformations!faking -->
+It is possible to fake transformations other than the log. Just use the same method,
+e.g.
+```{r, eval = FALSE}
+regrid(emm, transform = "probit")
+```
+would re-grid the existing `emm` to the probit scale. Note that any estimates in `emm`
+outside of the interval $(0,1)$ will be flagged as non-estimable.
+
+The section on standardized responses gives an example of reverse-engineering 
+a standardized response transformation in this way.
+
+
+## Standardized response {#stdize}
+<!-- @index Transformations!Standardizing; Transformations!`scale()`;
+    `scale()`; Standardized response; Examples!`fiber` -->
+In some disciplines, it is common to fit a model to a standardized response variable.
+R's base function `scale()` makes this easy to do; but it is important to notice that
+`scale(y)` is more complicated than, say, `sqrt(y)`, because `scale(y)` requires 
+all the values of `y` in order to determine the centering and scaling parameters.
+The `ref_grid()` function (called by `emmeans() and others) tries to detect
+the scaling parameters. To illustrate:
+```{r, message = FALSE}
+fiber.lm <- lm(scale(strength) ~ machine * scale(diameter), data = fiber)
+emmeans(fiber.lm, "machine")   # on the standardized scale
+emmeans(fiber.lm, "machine", type = "response")   # strength scale
+```
+More interesting (and complex) is what happens with `emtrends()`.
+Without anything fancy added, we have
+```{r}
+emtrends(fiber.lm, "machine", var = "diameter")
+```
+These slopes are (change in `scale(strength)`) / (change in `diameter`); that is,
+we didn't do anything to undo the response transformation, but the trend is
+based on exactly the variable specified, `diameter`. To get (change in `strength`) / (change in `diameter`), we need to undo the response transformation, and that is done via `transform` (which invokes `regrid()` after the reference grid is constructed):
+```{r}
+emtrends(fiber.lm, "machine", var = "diameter", transform = "response")
+```
+What if we want slopes for (change in `scale(strength)`) / (change in `scale(diameter)`)?
+This can be done, but it is necessary to manually specify the scaling parameters for `diameter`.
+```{r}
+with(fiber, c(mean = mean(diameter), sd = sd(diameter)))
+emtrends(fiber.lm, "machine", var = "scale(diameter, 24.133, 4.324)")
+```
+This result is the one most directly related to the regression coefficients:
+```{r}
+coef(fiber.lm)[4:6]
+```
+There is a fourth possibility, (change in `strength`) / (change in `scale(diameter)`),
+that I leave to the reader.
+
+### What to do if auto-detection fails
+Auto-detection of standardized responses is a bit tricky, and doesn't always succeed. 
+If it fails, 
+a message is displayed and the transformation is ignored. In cases where it doesn't work,
+we need to explicitly specify the transformation using `make.tran()`. The methods are exactly 
+as shown earlier in this vignette, so we show the code but not the results for 
+a hypothetical example.
+
+One method is to fit the model and then add the transformation information later.
+In this example, `some.fcn` is a model-fitting function which for some reason doesn't
+allow the scaling information to be detected.
+```{r, eval = FALSE}
+mod <- some.fcn(scale(RT) ~ group + (1|subject), data = mydata)
+emmeans(mod, "group", type = "response",
+        tran = make.tran("scale", y = mydata$RT))
+```
+The other, equivalent, method is to create the transformation object first 
+and use it in fitting the model:
+```{r, eval = FALSE}
+mod <- with(make.tran("scale", y = mydata$RT),
+            some.fcn(linkfun(RT) ~ group + (1|subject), data = mydata))
+emmeans(mod, "group", type = "response")
+```
+
+### Reverse-engineering a standardized response
+An interesting twist on all this is the reverse situation: Suppose we fitted the model 
+*without* the standardized response, but we want to kniow what the results would be if
+we had standardized. Here we reverse-engineer the `fiber.lm` example above:
+```{r, message = FALSE}
+fib.lm <- lm(strength ~ machine * diameter, data = fiber)
+
+# On raw scale:
+emmeans(fib.lm, "machine")
+
+# On standardized scale:
+tran <- make.tran("scale", y = fiber$strength)
+emmeans(fib.lm, "machine", transform = tran)
+```
+In the latter call, the `transform` argument causes `regrid()` to
+be called after the reference grid is constructed.
+
+
+
 
 [Back to Contents](#contents)
 
@@ -350,20 +450,65 @@ It depends on $\sigma$, and the larger this is, the greater the bias adjustment
 is needed. This second-order bias adjustment is what is currently used
 in the **emmeans** package when bias-adjustment is requested. There are better or exact adjustments for certain cases, and future updates may incorporate some of those.
 
+### Pigs example revisited {#pigs-biasadj}
+<!-- @index Examples!`pigs` -->
+Let us compare the estimates in [the overview](#overview) after we apply a bias
+adjustment. First, note that an estimate of the residual SD is available via
+the `sigma()` function:
+```{r}
+sigma(pigs.lm)
+```
+This estimate is used by default. The bias-adjusted EMMs for the sources are:
+```{r}
+summary(pigs.emm.s, type = "response", bias.adj = TRUE)
+```
+These estimates (and also their SEs) are slightly larger than we had without
+bias adjustment. They are estimates of the *aritmetic* mean responses, rather
+than the *geometric* means shown in the overview. Had the value of `sigma` been
+larger, the adjustment would have been greater. You can experiment with this by
+adding a `sigma =` argument to the above call.
+
 ### Response transformations vs. link functions {#link-bias}
 <!-- @index Transformations!Response versus link functions;
-    Bias adjustment!For link functions vs. response transformations; Bias adjustment!In GLMMs and GEE models; -->
+    Bias adjustment!For link functions vs. response transformations; -->
 At this point, it is important to point out that the above discussion focuses on
-response transformations, as opposed to link functions used in generalized linear
-models (GLMs). In an ordinary GLM, no bias adjustment is needed or appropriate
+*response* transformations, as opposed to link functions used in generalized linear
+models (GLMs). In an ordinary GLM, no bias adjustment is needed, nor is it
+appropriate, 
 because the link function is just used to define a nonlinear relationship
-between the actual response mean $\eta$ and the linear predictor. However, in a
-generalized linear *mixed* model, including generalized estimating equations and
-such, there are random components involved, and then bias adjustment becomes
-appropriate.
+between the actual response mean $\eta$ and the linear predictor. That is, the 
+back-transformed parameter is already the mean. 
 
-### CBPP example {#cbpp}
-<!-- @index Examples!`cbpp` -->
+
+#### InsectSprays example {#insects}
+<!-- @index Examples!`InsectSprays`;  Bias adjustment!When *not* to use; -->
+To illustrate this, consider
+the `InsectSprays` data in the **datasets** package. The response variable
+is a count, and there is one treatment, the spray that is used. Let us
+model the count as a Poisson variable with (by default) a log link; and
+obtain the EMMs, with and without a bias adjustment
+```{r}
+ismod <- glm(count ~ spray, data = InsectSprays, family = poisson())
+emmeans(ismod, "spray", type = "response", bias.adj = FALSE)
+emmeans(ismod, "spray", type = "response", bias.adj = TRUE)
+```
+These are substantially different! Which is right? Well, due to the simple structure of this dataset, the estimates should be well
+in line with the simple observed mean counts:
+```{r}
+with(InsectSprays, tapply(count, spray, mean))
+```
+This illustrates that it is the *non*-bias-adjusted results that are
+appropriate. Again, the point here is that a GLM does not have an additive error
+term, that the model is already formulated in terms of the mean, not some
+generalized mean. Users must be very careful with this! There is no way to
+automatically do the right thing.
+
+Note that, in a generalized linear *mixed* model, including generalized estimating
+equations and such, there *are* additive random components involved, and then bias
+adjustment becomes appropriate.
+
+#### CBPP example {#cbpp}
+<!-- @index Examples!`cbpp`; Bias adjustment!In GLMMs and GEE models; -->
 Consider an example adapted from the help page for `lme4::cbpp`. 
 Contagious bovine pleuropneumonia (CBPP) is a disease in African cattle,
 and the dataset contains data on incidence of CBPP in several herds of cattle
@@ -373,7 +518,8 @@ as well as overdispersion (variations larger than expected with a simple binomia
 ```{r, message = FALSE}
 require(lme4)
 cbpp <- transform(cbpp, unit = 1:nrow(cbpp))
-cbpp.glmer <- glmer(cbind(incidence, size - incidence) ~ period + (1 | herd) +  (1|unit),
+cbpp.glmer <- glmer(cbind(incidence, size - incidence) ~ period + 
+                          (1 | herd) +  (1 | unit),
                     family = binomial, data = cbpp)
 
 emm <- emmeans(cbpp.glmer, "period")
@@ -401,6 +547,12 @@ cases <- with(cbpp, tapply(incidence, period, sum))
 trials <- with(cbpp, tapply(size, period, sum))
 cases / trials
 ```
+
+Left as an exercise: Revisit the `InsectSprays` example, but (using similar
+methods to the above) create a `unit` variable and fit an over-dispersion model.
+Compare the results with and without bias adjustment, and evaluate these results
+against the earlier results. This is simpler than the CBPP example because there
+is only one random effect.
 
 [Back to Contents](#contents)
 

@@ -6,9 +6,11 @@
 \alias{get_emm_option}
 \alias{emm_defaults}
 \title{Set or change emmeans options}
-\format{An object of class \code{list} of length 16.}
+\format{
+An object of class \code{list} of length 19.
+}
 \usage{
-emm_options(...)
+emm_options(..., disable)
 
 get_emm_option(x, default = emm_defaults[[x]])
 
@@ -16,6 +18,12 @@ emm_defaults
 }
 \arguments{
 \item{...}{Option names and values (see Details)}
+
+\item{disable}{If non-missing, this will reset all options to their defaults 
+if \code{disable} tests \code{TRUE} (but first save them for possible later 
+restoration). Otherwise, all previously saved options
+are restored. This is important for bug reporting; please see the section below
+on reproducible bugs. When \code{disable} is specified, the other arguments are ignored.}
 
 \item{x}{Character value - the name of an option to be queried}
 
@@ -34,6 +42,12 @@ the \pkg{emmeans} package. These options are set separately for different contex
 which \code{emmGrid} objects are created, in a named list of option lists.
 }
 \details{
+\pkg{emmeans}'s options are stored as a list in the system option \code{"emmeans"}. 
+Thus, \code{emm_options(foo = bar)} is the same as 
+\code{options(emmeans = list(..., foo = bar))} where \code{...} represents any
+previously existing options. The list \code{emm_defaults} contains the default
+values in case the corresponding element of system option \code{emmeans} is \code{NULL}.
+
 Currently, the following main list entries are supported:
 \describe{
 \item{\code{ref_grid}}{A named \code{list} of defaults for objects created by
@@ -49,6 +63,18 @@ object.}
   \code{\link{summary.emmGrid}}, \code{\link{predict.emmGrid}}, \code{\link{test.emmGrid}},
   \code{\link{confint.emmGrid}}, and \code{\link{emmip}}. The only option that can
   affect the latter four is \code{"predict.method"}.}
+\item{\code{sep}}{A character value to use as a separator in labeling factor combinations.
+  Such labels are potentially used in several places such as \code{\link{contrast}} and 
+  \code{\link{plot.emmGrid}} when combinations of factors are compared or plotted.
+  The default is \code{" "}.}
+\item{\code{parens}}{Character vector that determines which labels are parenthesized
+  when they are contrasted. The first element is a regular expression, and the second and
+  third elements are used as left and right parentheses. 
+  See details for the \code{parens} argument in \code{\link{contrast}}. The default
+  will parenthesize labels containing the four arithmetic operators, 
+  using round parentheses.}
+\item{\code{cov.keep}}{The default value of \code{cov.keep} in \code{\link{ref_grid}}.
+  Defaults to \code{"2"}, i.e., two-level covariates are treated like factors.}
 \item{\code{graphics.engine}}{A character value matching 
   \code{c("ggplot", "lattice")}, setting the default engine to use in
   \code{\link{emmip}} and \code{\link{plot.emmGrid}}.  Defaults to \code{"ggplot"}.}
@@ -94,6 +120,23 @@ produced by the \pkg{lme4} package). See that section of the "models" vignette
 for details.}
 } %%%%%% end \describe
 }
+\section{Reproducible bugs}{
+
+Most options set display attributes and such that are not likely to be associated
+with bugs in the code. However, some other options (e.g., \code{cov.keep})
+are essentially configuration settings that may affect how/whether the code
+runs, and the settings for these options may cause subtle effects that may be
+hard to reproduce. Therefore, when sending a bug report, please create a reproducible
+example and make sure the bug occurs with all options set at their defaults.
+This is done by preceding it with  \code{emm_options(disable = TRUE)}. 
+
+By the way, \code{disable} works like a stack (LIFO buffer), in that \code{disable = TRUE}
+is equivalent to \code{emm_options(saved.opts = emm_options())} and 
+\code{emm_options(disable = FALSE)} is equivalent to 
+\code{options(emmeans = get_emm_option("saved.opts"))}. To completely erase
+all options, use \code{options(emmeans = NULL)}
+}
+
 \examples{
 \dontrun{
 emm_options(ref_grid = list(level = .90),
@@ -113,6 +156,16 @@ emm_options(disable.pbkrtest = TRUE)
 
 # See tolerance being used for determining estimability
 get_emm_option("estble.tol")
+
+\dontrun{
+# Set all options to their defaults
+emm_options(disable = TRUE)
+# ... and perhaps follow with code for a minimal reproducible bug,
+#     which may include emm_options() clls if they are pertinent ...
+
+# restore options that had existed previously
+emm_options(disable = FALSE)
+}
 
 }
 \seealso{

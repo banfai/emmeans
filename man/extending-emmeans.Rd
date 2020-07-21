@@ -12,8 +12,7 @@
 \usage{
 recover_data(object, ...)
 
-\method{recover_data}{call}(object, trms, na.action, data = NULL,
-  params = "pi", ...)
+\method{recover_data}{call}(object, trms, na.action, data = NULL, params = "pi", ...)
 
 emm_basis(object, trms, xlev, grid, ...)
 
@@ -44,7 +43,8 @@ formula that are \emph{not} predictors. For example, a spline model may involve
 a local variable \code{knots} that is not a predictor, but its value is
 needed to fit the model. Names of parameters not actually used are harmless,
 and the default value \code{"pi"} (the only numeric constant in base R)
-is provided in case the model involves it.}
+is provided in case the model involves it. An example involving splines
+may be found at \url{https://github.com/rvlenth/emmeans/issues/180}.}
 
 \item{xlev}{Named list of factor levels (\emph{excluding} ones coerced to 
 factors in the model formula)}
@@ -91,7 +91,8 @@ The \code{emm_basis} method should return a \code{list} with the
 This documents the methods that \code{\link{ref_grid}} calls. A user
 or package developer may add \pkg{emmeans} support for a model
 class by writing \code{recover_data} and \code{emm_basis} methods
-for that class.
+for that class. (Users in need for a quick way to obtain results for a model
+that is not supported may be better served by the \code{\link{qdrg}} function.)
 }
 \note{
 Without an explicit \code{data} argument, \code{recover_data} returns

@@ -1,5 +1,5 @@
 ##############################################################################
-#    Copyright (c) 2012-2017 Russell V. Lenth                                #
+#    Copyright (c) 2012-2019 Russell V. Lenth                                #
 #                                                                            #
 #    This file is part of the emmeans package for R (*emmeans*)              #
 #                                                                            #
@@ -68,12 +68,19 @@ contrast = function(object, ...)
 #'   valid way to back-transform contrasts: differences of logs are logs of
 #'   ratios, and differences of logits are odds ratios. If \code{ratios = TRUE}
 #'   and summarized with \code{type = "response"}, \code{contrast} results are
-#'   back-trajnsformed to ratios whenever we have true contrasts (coefficients
+#'   back-transformed to ratios whenever we have true contrasts (coefficients
 #'   sum to zero). For other transformations, there is no natural way to
 #'   back-transform contrasts, so even when summarized with \code{type = "response"},
-#'   contrasts are computed and displayed on the transformed scale. Similarly, 
+#'   contrasts are computed and displayed on the linear-predictor scale. Similarly, 
 #'   if \code{ratios = FALSE}, log and logit transforms are treated in the same way as
 #'   any other transformation.
+#' @param parens character or \code{NULL}. If a character value, the labels for levels
+#'   being contrasted are parenthesized if they match the regular expression in 
+#'   \code{parens[1]} (via \code{\link{grep}}). The default is \code{emm_option("parens")}.
+#'   Optionally, \code{parens} may contain second and third elements specifying
+#'   what to use for left and right parentheses (default \code{"("} and \code{")"}).
+#'   Specify \code{parens = NULL} or \code{parens = "a^"} (which won't match anything)
+#'   to disable all parenthesization.
 #' @param ... Additional arguments passed to other methods
 #'
 #' @return \code{contrast} and \code{pairs} return an object of class
@@ -170,13 +177,14 @@ contrast = function(object, ...)
 contrast.emmGrid = function(object, method = "eff", interaction = FALSE, 
                         by, offset = NULL, scale = NULL, name = "contrast", 
                         options = get_emm_option("contrast"), 
-                        type, adjust, simple, combine = FALSE, ratios = TRUE, ...) 
+                        type, adjust, simple, combine = FALSE, ratios = TRUE, 
+                        parens, ...) 
 {
     if(!missing(simple))
         return(.simcon(object, method = method, interaction = interaction,
                       offset = offset, scale = scale, name = name, options = options,
                       type = type, simple = simple, combine = combine, 
-                      adjust = adjust, ...))
+                      adjust = adjust, parens = parens, ...))
     if(missing(by)) 
         by = object@misc$by.vars
     if(length(by) == 0) # character(0) --> NULL
@@ -184,7 +192,7 @@ contrast.emmGrid = function(object, method = "eff", interaction = FALSE,
     
     nesting = object@model.info$nesting
     if (!is.null(nesting) || !is.null(object@misc$display))
-        return (.nested_contrast(rgobj = object, method = method, by = by, adjust = adjust, ...))
+        return (.nested_contrast(rgobj = object, method = method, by = by, adjust = adjust, parens = parens, ...))
     
     orig.grid = object@grid[, , drop = FALSE]
     orig.grid[[".wgt."]] = orig.grid[[".offset."]] = NULL
@@ -200,13 +208,16 @@ contrast.emmGrid = function(object, method = "eff", interaction = FALSE,
             vars = c(setdiff(vars, by), by)
             k = k - length(by)
         }
+        nms = names(interaction)
         interaction = as.list(rep(interaction, k)[1:k])
+        names(interaction) = c(nms, rep("", k))[1:k]
+        nms = vars[1:k]
         if (is.null(names(interaction)))
-            names(interaction) = vars
+            names(interaction) = nms
         else {
-            unnamed = which(!(names(interaction) %in% vars))
-            names(interaction)[unnamed] = setdiff(vars, names(interaction))
-            vars = names(interaction)
+            unnamed = which(!(names(interaction) %in% nms))
+            names(interaction)[unnamed] = setdiff(nms, names(interaction))
+            nms = names(interaction)
         }
         
         
@@ -216,24 +227,24 @@ contrast.emmGrid = function(object, method = "eff", interaction = FALSE,
         tcm = NULL
         for (i in k:1) {
             if (is.character(interaction[[i]]))
-                nm = paste(vars[i], interaction[[i]], sep = "_")
+                nm = paste(nms[i], interaction[[i]], sep = "_")
             else
-                nm = paste(vars[i], "custom", sep = "_")
-            object = contrast.emmGrid(object, interaction[[i]], by = vars[-i], name = nm, ...)
+                nm = paste(nms[i], "custom", sep = "_")
+            pos = which(vars == nms[i])
+            object = contrast.emmGrid(object, interaction[[i]], by = vars[-pos], name = nm, ...)
             if(is.null(tcm))
                 tcm = object@misc$con.coef
             else
                 tcm = object@misc$con.coef %*% tcm
-            vars[i] = nm
+            vars[pos] = nm
         }
-        object = update(object, by = by, adjust = adjust, ..., silent = TRUE)
+        object = update(object, by = by, adjust = adjust, silent = TRUE) 
+          ### removed `...` here Nov 2019 because a `mode` arg gets matched with `model.info`
+          ### when passed via formula lhs in `emmeans()`
         object@misc$is.new.rg = NULL
         object@misc$orig.grid = orig.grid
         object@misc$con.coef = tcm
-        if(!is.null(options)) {
-            options$object = object
-            object = do.call(update.emmGrid, options)
-        }
+        object = .update.options(object, options, ...)
         return(object)
     }
     
@@ -254,20 +265,33 @@ contrast.emmGrid = function(object, method = "eff", interaction = FALSE,
             args[[nm]] = NULL
             all.args[[nm]] = NULL
         }
-        all.levs = do.call("paste", unname(all.args))   # keep all levels in case we have permutations of them
+        all.levs = do.call("paste", c(unname(all.args), sep = get_emm_option("sep")))   # keep all levels in case we have permutations of them
     }
     args = unname(args)
-    args$sep = ","
+    args$sep = get_emm_option("sep")
     levs = do.call("paste", args)  # NOTE - these are levels for the first (or only) by-group
     if (length(levs) == 0)   # prevent error when there are no levels to contrast
         method = "eff"
+    if(is.null(by))
+        all.levs = levs
     
+    # parensthesize levels if they contain spaces or operators
+    if(missing(parens))
+        parens = get_emm_option("parens")
+    if(is.character(parens) && length(idx <- grep(parens[1], all.levs)) > 0) {
+        if(length(parens) < 3)
+            parens = c(parens, "(", ")")
+        all.levs[idx] = paste0(parens[2], all.levs[idx], parens[3])
+        idx = grep(parens[1], levs)
+        if (length(idx) > 0)
+            levs[idx] = paste0(parens[2], levs[idx], parens[3])
+     }
     
     if (is.list(method)) {
         cmat = as.data.frame(method, optional = TRUE)
         # I have no clue why they named that argument 'optional',
         # but setting it to TRUE keeps it from messing up the names
-        method = function(levs) cmat
+        method = function(levs, ...) cmat
     }
     else if (is.character(method)) {
         fn = paste(method, "emmc", sep=".")
@@ -408,7 +432,7 @@ contrast.emmGrid = function(object, method = "eff", interaction = FALSE,
     }
     
     # ensure we don't inherit inappropriate settings
-    misc$null = misc$delta = misc$side = NULL
+    misc$null = misc$delta = misc$side = misc$calc = NULL
     
     object@roles$predictors = "contrast"
     levels = list()
@@ -425,11 +449,8 @@ contrast.emmGrid = function(object, method = "eff", interaction = FALSE,
     
     if (!missing(type))
         options = as.list(c(options, predict.type = type))
-    if(!is.null(options)) {
-        options$object = result
-        result = do.call("update.emmGrid", options)
-    }
-    result
+    
+    .update.options(result, options, ...)
 }
 
 
@@ -477,7 +498,6 @@ contrast.emmGrid = function(object, method = "eff", interaction = FALSE,
 #' @rdname contrast 
 #' @param x An \code{emmGrid} object
 #' @param reverse Logical value - determines whether to use \code{"pairwise"} (if \code{TRUE}) or \code{"revpairwise"} (if \code{FALSE}).
-#' @inheritParams contrast.emmGrid 
 #' @importFrom graphics pairs
 #' @export
 pairs.emmGrid = function(x, reverse = FALSE, ...) {

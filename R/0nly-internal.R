@@ -26,7 +26,7 @@
 ##   Passes ... to all.vars
 #' @export
 .all.vars = function(expr, retain = c("\\$", "\\[\\[", "\\]\\]", "'", '"'), ...) {
-    if (is.null(expr))
+    if (is.null(expr) || length(expr) == 0)
         return(character(0))
     if (!inherits(expr, "formula")) {
         expr = try(eval(expr), silent = TRUE)
@@ -52,7 +52,7 @@
 .parse.by.formula = function(form) {
     allv = .all.vars(form)
     ridx = ifelse(length(form) == 2, 2, 3)
-    allrhs = as.character(form)[ridx]
+    allrhs = as.vector(form, "character")[ridx]
     allrhs = gsub("\\|", "+ .by. +", allrhs) # '|' --> '.by.'
     allrhs = .all.vars(stats::reformulate(allrhs))
     bidx = grep(".by.", allrhs, fixed = TRUE)
@@ -133,6 +133,14 @@
     offset
 }
 
+# combine variables in several `terms` objects
+#' @export
+.combine.terms = function(...) {
+    trms = list(...)
+    vars = unlist(lapply(trms, .all.vars))
+    terms(.reformulate(vars, env = environment(trms[[1]])))
+}
+
 ######################################################################
 ### Contributed by Jonathon Love, https://github.com/jonathon-love ###
 ### and adapted by RVL to exclude terms like df$trt or df[["trt"]] ###
@@ -144,7 +152,7 @@
 #   For example I need reformulate() sometimes to strip off function calls
 #   and this .reformulate works quite differently.
 #
-.reformulate <- function (termlabels, response = NULL, intercept = TRUE)
+.reformulate <- function (termlabels, response = NULL, intercept = TRUE, env = parent.frame())
 {
     if (!is.character(termlabels) || !length(termlabels))
         stop("'termlabels' must be a character vector of length at least one")
@@ -162,7 +170,7 @@
         rval[[2L]] = if (is.character(response))
             as.symbol(response)
     else response
-    environment(rval) = parent.frame()
+    environment(rval) = env
     rval
 }
 
@@ -176,6 +184,41 @@
             sapply(strsplit(vars[comp], "\\$|\\[\\[|\\]\\]"), function(.) .[1:2]))
     }
     comp
+}
+
+### Find `arg` in `...`. If pmatched, return its value, else NULL
+### If arg is a vector, runs .match.dots.list
+.match.dots = function(arg, ..., lst) {
+    if(missing(lst))
+        lst = list(...)
+    if (length(arg) > 1)
+        return (.match.dots.list(arg, lst = lst))
+    m = pmatch(names(lst), arg)
+    idx = which(!is.na(m))
+    if(length(idx) == 1)  lst[[idx]]
+    else                  NULL
+}
+
+# like .match.dots, but returns a list of all matched args
+.match.dots.list = function(args, ..., lst) {
+    if(missing(lst))
+        lst = list(...)
+    rtn = list()
+    for (a in args)
+        rtn[[a]] = .match.dots(a, lst = lst)
+    rtn
+}
+
+# return updated object with option list AND dot list
+.update.options = function(object, options, ...) {
+    if (!is.list(options))
+        options = as.list(options)
+    dot.opts = .match.dots.list(.valid.misc, ...)
+    # entries in both lists are overridden by those in ...
+    for (nm in names(dot.opts))
+        options[[nm]] = dot.opts[[nm]]
+    options[["object"]] = object
+    do.call(update.emmGrid, options)
 }
 
 # my own model.frame function. Intercepts compound names
@@ -276,3 +319,22 @@ model.frame = function(formula, data, ...) {
 }
 # of possible use as fail in .requireNS
 .nothing = function(...) invisible()
+
+
+### Utilities for converting symm matrices to and from lower-triangle storage mode
+.get.lt = function(X) {
+    rtn = X[lower.tri(X, diag = TRUE)]
+    attr(rtn, "nrow") = nrow(X)
+    rtn
+}
+
+.lt2mat = function(lt) {
+    if (is.null(n <- attr(lt, "nrow")))
+        n = (sqrt(8 * length(lt) + 1) - 1) / 2
+    X = matrix(NA, nrow = n, ncol = n)
+    lti = which(lower.tri(X, diag = TRUE))
+    X[lti] = lt
+    X = t(X)
+    X[lti] = lt
+    X
+}

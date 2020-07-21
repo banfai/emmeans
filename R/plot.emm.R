@@ -123,10 +123,24 @@ plot.emmGrid = function(x, y, type, CIs = TRUE, PIs = FALSE, comparisons = FALSE
 #'   \code{frequentist} is non-missing and TRUE, a frequentist summary is used for
 #'   obtaining the plot data, rather than the posterior point estimate and HPD
 #'   intervals. This argument is ignored when it is not a Bayesian model.
+#' @param plotit Logical value. If \code{TRUE}, a graphical object is returned;
+#'   if \code{FALSE}, a data.frame is returned containing all the values
+#'   used to construct the plot.
 #' @param ... Additional arguments passed to \code{\link{update.emmGrid}}, 
 #'   \code{\link{predict.emmGrid}}, or
 #'   \code{\link[lattice:xyplot]{dotplot}}
 #'
+#' @return If \code{plotit = TRUE}, a graphical object is returned.
+#' 
+#'   If \code{plotit = FALSE}, a \code{data.frame} with the table of
+#'   EMMs that would be plotted. In the latter case, the estimate being plotted
+#'   is named \code{the.emmean}, and any factors involved have the same names as
+#'   in the object. Confidence limits are named \code{lower.CL} and
+#'   \code{upper.CL}, prediction limits are named \code{lpl} and \code{upl}, and
+#'   comparison-arrow limits are named \code{lcmpl} and \code{ucmpl}.
+#'   There is also a variable named \code{pri.fac} which contains the factor 
+#'   combinations that are \emph{not} among the \code{by} variables.
+
 #' @section Details:
 #' If any \code{by} variables are in force, the plot is divided into separate
 #' panels. These functions use the \code{\link[lattice:xyplot]{dotplot}} function, and
@@ -141,7 +155,9 @@ plot.emmGrid = function(x, y, type, CIs = TRUE, PIs = FALSE, comparisons = FALSE
 #' comparisons of the estimates -- especially when estimates having large and
 #' small standard errors are intermingled in just the wrong way. Note that the
 #' maximum and minimum estimates have arrows only in one direction, since there
-#' is no need to compare them with anything higher or lower, respectively.
+#' is no need to compare them with anything higher or lower, respectively. See
+#' the \href{../doc/xplanations.html#arrows}{\code{vignette("xplanations",
+#' "emmeans")}} for details on how these are derived.
 #' 
 #' If \code{adjust} or \code{int.adjust} are not supplied, they default to the 
 #' internal \code{adjust} setting saved in \code{pairs(x)} and \code{x} 
@@ -159,17 +175,19 @@ plot.emmGrid = function(x, y, type, CIs = TRUE, PIs = FALSE, comparisons = FALSE
 #'      horizontal = FALSE, colors = "darkgreen")
 plot.summary_emm = function(x, y, horizontal = TRUE, CIs = TRUE,
                             xlab, ylab, layout, 
-                            colors = c("black", "blue", "blue", "red"), intervals, ...) {
+                            colors = c("black", "blue", "blue", "red"), intervals, 
+                            plotit = TRUE, ...) {
     if(!missing(intervals))
         CIs = intervals
-    .plot.srg (x, y, horizontal, xlab, ylab, layout, CIs = CIs, colors = colors, ...)
+    .plot.srg (x, y, horizontal, xlab, ylab, layout, CIs = CIs, colors = colors, plotit = plotit, ...)
 }
 
 # Workhorse for plot.summary_emm
 .plot.srg = function(x, y, 
                      horizontal = TRUE, xlab, ylab, layout, colors,
                      engine = get_emm_option("graphics.engine"),
-                     CIs = TRUE, PIs = FALSE, extra = NULL, ...) {
+                     CIs = TRUE, PIs = FALSE, extra = NULL, 
+                     plotit = TRUE, ...) {
     
     engine = match.arg(engine, c("ggplot", "lattice"))
     if (engine == "ggplot") 
@@ -250,8 +268,11 @@ plot.summary_emm = function(x, y, horizontal = TRUE, CIs = TRUE,
         
     } # ---------- end lattice-specific -----------
     
+    sep = get_emm_option("sep")
     priv = attr(summ, "pri.vars")
-    pf = do.call(paste, unname(summ[priv]))
+    pf = do.call(paste, c(unname(summ[priv]), sep = sep))
+    if (length(pf) == 0)
+        pf = "1"
     summ$pri.fac = factor(pf, levels=unique(pf))
     chform = ifelse(horizontal,
                     paste("pri.fac ~", estName),
@@ -260,7 +281,7 @@ plot.summary_emm = function(x, y, horizontal = TRUE, CIs = TRUE,
     byv = attr(summ, "by.vars")
     if (!is.null(byv) && length(byv) > 0) {
         chform = paste(chform, "|", paste(byv, collapse="*"))
-        lbv = do.call("paste", unname(summ[byv])) # strings for matching by variables
+        lbv = do.call("paste", c(unname(summ[byv]), sep = sep)) # strings for matching by variables
         ubv = unique(lbv)
     }
     else {
@@ -292,7 +313,7 @@ plot.summary_emm = function(x, y, horizontal = TRUE, CIs = TRUE,
         if(is.null(byv))
             pbv = rep(1, nrow(psumm))
         else
-            pbv = do.call("paste", unname(psumm[byv]))
+            pbv = do.call("paste", c(unname(psumm[byv]), sep = sep))
         neach = length(lbv) / length(ubv)
         # indexes for pairs results -- est[id1] - est[id2]
         id1 = rep(seq_len(neach-1), rev(seq_len(neach-1)))
@@ -334,25 +355,37 @@ plot.summary_emm = function(x, y, horizontal = TRUE, CIs = TRUE,
             ll = llen[rows] = soln[seq_len(neach)]
             rl = rlen[rows] = soln[neach + seq_len(neach)]
             
-            # Perhaps put some kind of a check here?
+            # Abort if negative lengths
+            if (any(c(rl, ll) < 0)) {
+                stop("Aborted -- Some comparison arrows have negative length!", 
+                     call. = FALSE)
+            }
+            
+            # Overlap check
             for (i in seq_len(npairs)) {
                 v = 1 - v1[i]
                 obsv = 1 - abs(dif[i]) / ifelse(dif[i] > 0, 
                                                 ll[id1[i]] + rl[id2[i]], 
                                                 rl[id1[i]] + ll[id2[i]])
                 if (v*obsv < 0)
-                    message("Comparison discrepancy in group ", by, 
+                    warning("Comparison discrepancy in group ", by, 
                             ", ", psumm[i, 1], 
                             ":\n    Target overlap = ", round(v, 4),
-                            ", overlap on graph = ", round(obsv, 4))
+                            ", overlap on graph = ", round(obsv, 4),
+                            call. = FALSE)
             }
         }
         # shorten arrows that go past the data range
         rng = range(est)
+        diffr = diff(rng)
         ii = which(est - llen < rng[1])
-        llen[ii] = est[ii] - rng[1] + .05 * diff(rng)
+        llen[ii] = est[ii] - rng[1] + .02 * diffr
         ii = which(est + rlen > rng[2])
-        rlen[ii] = rng[2] - est[ii] + .05 * diff(rng)
+        rlen[ii] = rng[2] - est[ii] + .02 * diffr
+        
+        # remove arrows completely from extremes
+        llen[est < rng[1] + .0001 * diffr] = NA
+        rlen[est > rng[2] - .0001 * diffr] = NA
         
         invtran = I
         if (typeid == 1) {
@@ -366,10 +399,13 @@ plot.summary_emm = function(x, y, horizontal = TRUE, CIs = TRUE,
                 invtran = tran$linkinv
         }
         
-        lcmpl = summ$lcmpl = invtran(est - llen)
-        rcmpl = summ$rcmpl = invtran(est + rlen)
+        lcmpl = summ$lcmpl = as.numeric(invtran(est - llen))
+        rcmpl = summ$rcmpl = as.numeric(invtran(est + rlen))
     }
     else lcmpl = rcmpl = NULL
+    
+    if(!plotit) 
+        return(as.data.frame(summ))
     
     
     facName = paste(priv, collapse=":")
@@ -411,50 +447,40 @@ plot.summary_emm = function(x, y, horizontal = TRUE, CIs = TRUE,
     else {  ## ggplot method
         summ$lcl = lcl
         summ$ucl = ucl
-        if (horizontal) {
-            grobj = ggplot2::ggplot(summ, ggplot2::aes_(x = ~the.emmean, y = ~pri.fac)) 
-            if (PIs) 
-                grobj = grobj + ggplot2::geom_segment(ggplot2::aes_(x = ~lpl, xend = ~upl, 
-                                    y = ~pri.fac, yend = ~pri.fac), 
-                                    color = PI.col, lwd = 2.5, alpha = .15)
-            if (CIs) 
-                grobj = grobj + ggplot2::geom_segment(ggplot2::aes_(x = ~lcl, xend = ~ucl, 
-                                    y = ~pri.fac, yend = ~pri.fac), 
-                                    color = CI.col, lwd = 4, alpha = .25)
-            if (!is.null(extra))
-                grobj = grobj + ggplot2::geom_segment(ggplot2::aes_(x = ~lcmpl, xend = ~rcmpl, 
-                        y = ~pri.fac, yend = ~pri.fac), 
+
+        # construct horizontal plot - flip coords later if necessary
+        grobj = ggplot2::ggplot(summ, ggplot2::aes_(x = ~the.emmean, y = ~pri.fac)) 
+        if (PIs) 
+            grobj = grobj + ggplot2::geom_segment(ggplot2::aes_(x = ~lpl, xend = ~upl, 
+                                y = ~pri.fac, yend = ~pri.fac), 
+                                color = PI.col, lwd = 2.5, alpha = .15)
+        if (CIs) 
+            grobj = grobj + ggplot2::geom_segment(ggplot2::aes_(x = ~lcl, xend = ~ucl, 
+                                y = ~pri.fac, yend = ~pri.fac), 
+                                color = CI.col, lwd = 4, alpha = .25)
+        if (!is.null(extra)) {
+            grobj = grobj + 
+                ggplot2::geom_segment(ggplot2::aes_(x = ~the.emmean, 
+                        xend = ~lcmpl, y = ~pri.fac, yend = ~pri.fac), 
+                        arrow = ggplot2::arrow(length = ggplot2::unit(.07, "inches"), 
+                            type = "closed"), color = comp.col, 
+                        data = summ[!is.na(summ$lcmpl), ]) +
+                ggplot2::geom_segment(ggplot2::aes_(x = ~the.emmean, 
+                    xend = ~rcmpl, y = ~pri.fac, yend = ~pri.fac), 
                     arrow = ggplot2::arrow(length = ggplot2::unit(.07, "inches"), 
-                        ends = "both", type = "closed"), color = comp.col)
-            if (length(byv) > 0)
-                grobj = grobj + ggplot2::facet_grid(as.formula(paste(paste(byv, collapse = "+"), " ~ .")), 
-                                           labeller = "label_both")
-            grobj = grobj + ggplot2::geom_point(color = dot.col, size = 2)
-            if (missing(xlab)) xlab = attr(summ, "estName")
-            if (missing(ylab)) ylab = facName
+                            type = "closed"), color = comp.col,
+                    data = summ[!is.na(summ$rcmpl), ])
         }
-        else {
-            grobj = ggplot2::ggplot(summ, ggplot2::aes_(y = ~the.emmean, x = ~pri.fac)) 
-            if (PIs) 
-                grobj = grobj + ggplot2::geom_segment(ggplot2::aes_(y = ~lpl, yend = ~upl, 
-                            x = ~pri.fac, xend = ~pri.fac), 
-                            color = PI.col, lwd = 2.5, alpha = .15)
-            if (CIs) 
-                grobj = grobj + ggplot2::geom_segment(ggplot2::aes_(y = ~lcl, yend = ~ucl, 
-                            x = ~pri.fac, xend = ~pri.fac), 
-                            color = CI.col, lwd = 4, alpha = .25)
-            if (!is.null(extra))
-                grobj = grobj + ggplot2::geom_segment(ggplot2::aes_(y = ~lcmpl, yend = ~rcmpl, 
-                        x = ~pri.fac, xend = ~pri.fac), 
-                    arrow = ggplot2::arrow(length = ggplot2::unit(.07, "inches"), ends = "both", 
-                        type = "closed"), color = comp.col)
-            if (length(byv) > 0)
-                grobj = grobj + ggplot2::facet_grid(as.formula(paste(". ~ ", 
-                            paste(byv, collapse = "+"))), labeller = "label_both")
-            grobj = grobj + ggplot2::geom_point(color = dot.col, size = 2)
-            if (missing(ylab)) ylab = attr(summ, "estName")
-            if (missing(xlab)) xlab = facName
-        }
+        if (length(byv) > 0)
+            grobj = grobj + ggplot2::facet_grid(as.formula(paste(paste(byv, collapse = "+"), " ~ .")), 
+                                       labeller = "label_both")
+        grobj = grobj + ggplot2::geom_point(color = dot.col, size = 2)
+        if (missing(xlab)) xlab = attr(summ, "estName")
+        if (missing(ylab)) ylab = facName
+            
+        if(!horizontal)
+            grobj = grobj + ggplot2::coord_flip()
+        
         grobj + ggplot2::labs(x = xlab, y = ylab)
     }
 }

@@ -104,7 +104,7 @@ print.emmGrid = function(x,...)
 #' @param object An \code{emmGrid} object
 #' @param ... (required but not used)
 #' 
-#' @return The \code{vcov} method returns a ymmetric matrix of variances and
+#' @return The \code{vcov} method returns a symmetric matrix of variances and
 #'   covariances for \code{predict.emmGrid(object, type = "lp")}
 #'
 #' @method vcov emmGrid
@@ -198,11 +198,6 @@ vcov.emmGrid = function(object, ...) {
 #' \item{\code{adjust}}{(\code{character)}) is the default for the \code{adjust}
 #' argument in \code{\link{summary.emmGrid}}.}
 #' 
-#' \item{\code{estType}}{(\code{character}) is the type of the estimate. It
-#' should match one of \samp{c("prediction", "contrast", "pairs")}. This is used
-#' along with \code{"adjust"} to determine appropriate adjustments to P values
-#' and confidence intervals.}
-#' 
 #' \item{\code{famSize}}{(integer) is the number of means involved in a family of
 #' inferences; used in Tukey adjustment}
 #' 
@@ -215,6 +210,8 @@ vcov.emmGrid = function(object, ...) {
 #' 
 #' \item{\code{df}}{(numeric) overrides the default degrees of freedom with a
 #' specified single value.}
+#' 
+#' \item{\code{calc}}{(list) additional calculated columns. See \code{\link{summary.emmGrid}}.}
 #' 
 #' \item{\code{null}}{(numeric) null hypothesis for \code{summary} or
 #' \code{test} (taken to be zero if missing).}
@@ -233,6 +230,16 @@ vcov.emmGrid = function(object, ...) {
 #' \code{\link{predict.emmGrid}}, and \code{\link{emmip}}. Valid values are
 #' \code{"link"} (with synonyms \code{"lp"} and \code{"linear"}), or
 #' \code{"response"}.}
+#' 
+#' \item{\code{bias.adjust}, \code{frequentist}}{(character) These
+#' are used by \code{summary} if the value of these arguments are not specified.}
+#' 
+#' \item{\code{estType}}{(\code{character}) is used internally to determine 
+#' what \code{adjust} methods are appropriate. It should match one of 
+#' \samp{c("prediction", "contrast", "pairs")}. As an example of why this is needed,
+#' the Tukey adjustment should only be used for pairwise comparisons 
+#' (\code{estType = "pairs"}); if \code{estType} is some other string, Tukey
+#' adjustments are not allowed.}
 #' 
 #' \item{\code{avgd.over}}{(\code{character)} vector) are the names of the 
 #' variables whose levels are averaged over in obtaining marginal averages of 
@@ -271,6 +278,14 @@ vcov.emmGrid = function(object, ...) {
 #' and dimensions of \code{grid}, \code{linfct}, \code{bhat}, and \code{V} must
 #' conform.}
 #' } %%%%%%% end \describe 
+#' 
+#' @note
+#' When it makes sense, an option set by \code{update} will persist into 
+#' future results based on that object. But some options are disabled as well.
+#' For example, a \code{calc} option will be nulled-out if \code{contrast}
+#' is called, because it probably will not make sense to do the same 
+#' calculations on the contrast results, and in fact the variable(s) needed
+#' may not even still exist.
 #'
 #' @seealso \code{\link{emm_options}}
 #' @examples
@@ -278,18 +293,17 @@ vcov.emmGrid = function(object, ...) {
 #' mypigs <- transform(pigs, logconc = log(pigs$conc))
 #' mypigs.lm <- lm(logconc ~ source + factor(percent), data = mypigs)
 #' 
-#' # Reference grid that knows about the transformation:
+#' # Reference grid that knows about the transformation
+#' # and asks to include the sample size in any summaries:
 #' mypigs.rg <- update(ref_grid(mypigs.lm), tran = "log", 
-#'                     predict.type = "response")
+#'                     predict.type = "response",
+#'                     calc = c(n = ~.wgt.))
 #' emmeans(mypigs.rg, "source")
 update.emmGrid = function(object, ..., silent = FALSE) {
     args = list(...)
-    valid.misc = c("adjust","alpha","avgd.over","by.vars","delta","df",
-                   "initMesg","estName","estType","famSize","infer","inv.lbl",
-                   "level","methDesc","nesting","null","predict.type","pri.vars"
-                   ,"side","sigma","tran","tran.mult","tran.offset","tran2","type","is.new.rg")
+    # see .valid.misc below this function for list of legal options
     valid.slots = slotNames(object)
-    valid.choices = union(valid.misc, valid.slots)
+    valid.choices = union(.valid.misc, valid.slots)
     misc = object@misc
     for (nm in names(args)) {
         fullname = try(match.arg(nm, valid.choices), silent=TRUE)
@@ -349,11 +363,24 @@ update.emmGrid = function(object, ..., silent = FALSE) {
     object
 }
 
+### List of valid strings to match in update() ###
+.valid.misc = c("adjust","alpha","avgd.over","bias.adjust","by.vars","calc","delta","df",
+               "initMesg","estName","estType","famSize","frequentist","infer","inv.lbl",
+               "level","methDesc","nesting","null","predict.type","pri.vars",
+               "side","sigma","tran","tran.mult","tran.offset","tran2","type","is.new.rg")
+
+
 #' Set or change emmeans options
 #'
 #' Use \code{emm_options} to set or change various options that are used in
 #' the \pkg{emmeans} package. These options are set separately for different contexts in
 #' which \code{emmGrid} objects are created, in a named list of option lists.
+#' 
+#' \pkg{emmeans}'s options are stored as a list in the system option \code{"emmeans"}. 
+#' Thus, \code{emm_options(foo = bar)} is the same as 
+#' \code{options(emmeans = list(..., foo = bar))} where \code{...} represents any
+#' previously existing options. The list \code{emm_defaults} contains the default
+#' values in case the corresponding element of system option \code{emmeans} is \code{NULL}.
 #' 
 #' Currently, the following main list entries are supported:
 #' \describe{
@@ -370,6 +397,18 @@ update.emmGrid = function(object, ..., silent = FALSE) {
 #'   \code{\link{summary.emmGrid}}, \code{\link{predict.emmGrid}}, \code{\link{test.emmGrid}},
 #'   \code{\link{confint.emmGrid}}, and \code{\link{emmip}}. The only option that can
 #'   affect the latter four is \code{"predict.method"}.}
+#' \item{\code{sep}}{A character value to use as a separator in labeling factor combinations.
+#'   Such labels are potentially used in several places such as \code{\link{contrast}} and 
+#'   \code{\link{plot.emmGrid}} when combinations of factors are compared or plotted.
+#'   The default is \code{" "}.}
+#' \item{\code{parens}}{Character vector that determines which labels are parenthesized
+#'   when they are contrasted. The first element is a regular expression, and the second and
+#'   third elements are used as left and right parentheses. 
+#'   See details for the \code{parens} argument in \code{\link{contrast}}. The default
+#'   will parenthesize labels containing the four arithmetic operators, 
+#'   using round parentheses.}
+#' \item{\code{cov.keep}}{The default value of \code{cov.keep} in \code{\link{ref_grid}}.
+#'   Defaults to \code{"2"}, i.e., two-level covariates are treated like factors.}
 #' \item{\code{graphics.engine}}{A character value matching 
 #'   \code{c("ggplot", "lattice")}, setting the default engine to use in
 #'   \code{\link{emmip}} and \code{\link{plot.emmGrid}}.  Defaults to \code{"ggplot"}.}
@@ -416,9 +455,32 @@ update.emmGrid = function(object, ..., silent = FALSE) {
 #' } %%%%%% end \describe
 #'
 #' @param ... Option names and values (see Details)
+#' @param disable If non-missing, this will reset all options to their defaults 
+#'   if \code{disable} tests \code{TRUE} (but first save them for possible later 
+#'   restoration). Otherwise, all previously saved options
+#'   are restored. This is important for bug reporting; please see the section below
+#'   on reproducible bugs. When \code{disable} is specified, the other arguments are ignored.
 #' 
 #' @return \code{emm_options} returns the current options (same as the result 
 #'   of \samp{getOption("emmeans")}) -- invisibly, unless called with no arguments.
+#' 
+#' @section Reproducible bugs:
+#' Most options set display attributes and such that are not likely to be associated
+#' with bugs in the code. However, some other options (e.g., \code{cov.keep})
+#' are essentially configuration settings that may affect how/whether the code
+#' runs, and the settings for these options may cause subtle effects that may be
+#' hard to reproduce. Therefore, when sending a bug report, please create a reproducible
+#' example and make sure the bug occurs with all options set at their defaults.
+#' This is done by preceding it with  \code{emm_options(disable = TRUE)}. 
+#' 
+#' By the way, \code{disable} works like a stack (LIFO buffer), in that \code{disable = TRUE}
+#' is equivalent to \code{emm_options(saved.opts = emm_options())} and 
+#' \code{emm_options(disable = FALSE)} is equivalent to 
+#' \code{options(emmeans = get_emm_option("saved.opts"))}. To completely erase
+#' all options, use \code{options(emmeans = NULL)}
+#' 
+#' 
+#' 
 #' @seealso \code{\link{update.emmGrid}}
 #' @export
 #' @examples
@@ -440,17 +502,35 @@ update.emmGrid = function(object, ..., silent = FALSE) {
 #' 
 #' # See tolerance being used for determining estimability
 #' get_emm_option("estble.tol")
+#' 
+#' \dontrun{
+#' # Set all options to their defaults
+#' emm_options(disable = TRUE)
+#' # ... and perhaps follow with code for a minimal reproducible bug,
+#' #     which may include emm_options() clls if they are pertinent ...
+#' 
+#' # restore options that had existed previously
+#' emm_options(disable = FALSE)
+#' }
 #'
-emm_options = function(...) {
+emm_options = function(..., disable) {
     opts = getOption("emmeans", list())
-    #    if (is.null(opts)) opts = list()
     newopts = list(...)
+    display = TRUE  # flag to display all options if ... is empty
+    if (!missing(disable)) {
+        if (disable)
+            opts = list(saved.opts = opts)
+        else if (!is.null(saved <- opts$saved.opts))
+            opts = saved
+        newopts = list()
+        display = FALSE
+    }
     for (nm in names(newopts))
         opts[[nm]] = newopts[[nm]]
     options(emmeans = opts)
     if (length(newopts) > 0)
         invisible(opts)
-    else {
+    else if (display) {
         opts = c(opts, emm_defaults)
         opts[sort(names(opts))]
     }
@@ -479,6 +559,9 @@ emm_defaults = list (
     emmeans = list(infer = c(TRUE, FALSE)),
     contrast = list(infer = c(FALSE, TRUE)),
     save.ref_grid = TRUE,     # save new ref_grid in .Last.ref_grid
+    cov.keep = "2",           # default for cov.keep arg in ref_grid
+    sep = " ",                # separator for combining factor levels
+    parens = c(r"{-|\+|\/|\*}", "(", ")"), # patterns for what/how to parenthesize in contrast
     graphics.engine = "ggplot",  # default for emmip and plot.emmGrid
 ###    msg.data.call = TRUE,     # message when there's a call in data or subset
     msg.interaction = TRUE,   # message about averaging w/ interactions
@@ -526,20 +609,24 @@ emm_defaults = list (
 #' only change being the addition of the posterior sample.
 #' 
 #' @param object An object of class \code{emmGrid}
-#' @param transform Character or logical value. If \code{"response"} or
-#'   \code{"mu"}, the inverse transformation is applied to the estimates in the
-#'   grid (but if there is both a link function and a response transformation,
-#'   \code{"mu"} back-transforms only the link part); if \code{"log"}, the
-#'   results are formulated as if the response had been \code{log}-transformed;
-#'   if \code{"none"}, predictions thereof are on the same scale as in 
-#'   \code{object}, and any internal transformation information is preserved. 
-#'   If \code{transform = "pass"}, the object is not re-gridded in any way (this
+#' @param transform Character, list, or logical value. If \code{"response"},
+#'   \code{"mu"}, or \code{TRUE}, the inverse transformation is applied to the
+#'   estimates in the grid (but if there is both a link function and a response
+#'   transformation, \code{"mu"} back-transforms only the link part); if
+#'   \code{"none"} or \code{FALSE}, \code{object} is re-gridded so that its
+#'   \code{bhat} slot contains \code{predict(object)} and its \code{linfct} slot
+#'   is the identity. Any internal transformation information is preserved. If
+#'   \code{transform = "pass"}, the object is not re-gridded in any way (this
 #'   may be useful in conjunction with \code{N.sim}).
-#'   For compatibility with past versions, \code{transform} may also be logical;
-#'   \code{TRUE} is taken as \code{"response"}, and \code{FALSE} as 
-#'   \code{"none"}.
-#' @param inv.log.lbl Character value. This applies only when \code{transform =
-#'   "log"}, and is used to label the predictions if subsequently summarized
+#'   
+#'   If \code{transform} is a character value in \code{links} (which is the set
+#'   of valid arguments for the \code{\link{make.link}} function, excepting
+#'   \code{"identity"}), or if \code{transform} is a list of the same form as
+#'   returned by \code{make.links} or \code{\link{make.tran}}, the results are
+#'   formulated as if the response had been transformed with that link function.
+#'   
+#' @param inv.link.lbl Character value. This applies only when \code{transform} 
+#'   is in \code{links}, and is used to label the predictions if subsequently summarized
 #'   with \code{type = "response"}.
 #' @param predict.type Character value. If provided, the returned object is
 #'   updated with the given type to use by default by \code{summary.emmGrid}
@@ -571,7 +658,7 @@ emm_defaults = list (
 #' linear function will be the minimum d.f. among those having nonzero
 #' coefficients. This is kind of an \emph{ad hoc} method, and it can
 #' over-estimate the degrees of freedom in some cases. An annotation is
-#' displayed below any subsequent summary results statisng that the 
+#' displayed below any subsequent summary results stating that the 
 #' degrees-of-freedom method is inherited from the previous method at
 #' the time of re-gridding.
 #'
@@ -601,13 +688,18 @@ emm_defaults = list (
 #' set.seed(2.71828)
 #' rgb <- regrid(rg, N.sim = 200, transform = "pass")
 #' emmeans(rgb, "source", type = "response")  ## similar to emm1
-regrid = function(object, transform = c("response", "mu", "unlink", "log", "none", "pass"), 
-                  inv.log.lbl = "response", predict.type, 
+regrid = function(object, transform = c("response", "mu", "unlink", "none", "pass", links), 
+                  inv.link.lbl = "response", predict.type, 
                   bias.adjust = get_emm_option("back.bias.adj"), sigma, 
                   N.sim, sim = mvtnorm::rmvnorm, ...) 
 {
+    links = c("logit", "probit", "cauchit", "cloglog", "log", "sqrt", "1/mu^2", "inverse")
     if (is.logical(transform))   # for backward-compatibility
         transform = ifelse(transform, "response", "none")
+    else if (is.list(transform)) {
+        userlink = transform
+        transform = "user"
+    }
     else
         transform = match.arg(transform)
     
@@ -666,7 +758,7 @@ regrid = function(object, transform = c("response", "mu", "unlink", "log", "none
                 paste("inherited from", prev.df.msg, "when re-gridding"))
 
     
-    if(transform %in% c("response", "mu", "unlink", "log") && !is.null(object@misc$tran)) {
+    if(transform %in% c("response", "mu", "unlink", links, "user") && !is.null(object@misc$tran)) {
         flink = link = attr(est, "link")
         if (bias.adjust) {
             if(missing(sigma))
@@ -697,27 +789,35 @@ regrid = function(object, transform = c("response", "mu", "unlink", "log", "none
             object@misc$tran = object@misc$tran.mult = object@misc$tran.offset = object@misc$inv.lbl = NULL
         sigma = object@misc$sigma = NULL
     }
-    if (transform == "log") { # from prev block, we now have stuff on response scale
-        Vee = vcov(object)
-        incl = which(object@bhat > 0)
+    if (transform %in% c(links, "user")) { # fake a transformation
+        link = if (transform == "user") userlink
+               else                     make.link(transform)
+        bounds = range(link$linkinv(c(-1e6, -100, -1, 0, 1, 100, 1e6)))
         nas = which(is.na(object@bhat)) # already NA
-        negs = which(object@bhat <= 0)
+        incl = vincl = which((object@bhat > bounds[1]) & (object@bhat < bounds[2]))
+        if (length(nas) > 0) 
+            vincl = which((object@bhat[-nas] > bounds[1]) & (object@bhat[-nas] < bounds[2]))
+        negs = setdiff(seq_along(object@bhat), incl)
         if (length(negs) > 0) {
-            message("Non-positive response predictions are flagged as non-estimable")
+            message("Invalid response predictions are flagged as non-estimable")
             object@bhat[negs] = NA
             tmp = seq_along(object@bhat)
             object@nbasis = sapply(c(nas, negs), function(ii) 0 + (tmp == ii))
         }
-        D = .diag(1/object@bhat[incl])
-        object@V = D %*% tcrossprod(Vee[incl, incl, drop = FALSE], D)
-        object@bhat = log(object@bhat)
+        object@bhat = link$linkfun(object@bhat)
+        Vee = object@V
+        if(length(incl) > 0) {
+            D = .diag(1/link$mu.eta(object@bhat[incl]))
+            object@V = D %*% tcrossprod(Vee[vincl, vincl, drop = FALSE], D)
+        }
         if (!is.na(PB[1])) {
             PB[PB <= 0] = NA
-            PB = log(PB)
+            PB = link$linkfun(PB)
             PB[1] = ifelse(is.na(PB[1]), 0, PB[1]) # make sure 1st elt isn't NA
         }
-        object@misc$tran = "log"
-        object@misc$inv.lbl = inv.log.lbl
+        object@misc$tran = if (transform == "user") link   
+                           else                     transform
+        object@misc$inv.lbl = inv.link.lbl
     }
     
     if(!is.na(PB[1])) {

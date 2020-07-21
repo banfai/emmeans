@@ -54,7 +54,7 @@ emm_basis.multinom = function(object, trms, xlev, grid,
     dffun = function(k, dfargs) dfargs$df
     ylevs = list(class = object$lev)
     if (is.null(ylevs)) ylevs = list(class = seq_len(k))
-    names(ylevs) = as.character(object$call$formula[[2]])
+    names(ylevs) = as.character.default(object$call$formula[[2]])
     misc$ylevs = ylevs
     if (mode == "prob")
         misc$postGridHook = .multinom.postGrid
@@ -63,7 +63,7 @@ emm_basis.multinom = function(object, trms, xlev, grid,
 }
 
 # post-processing of ref_grid for "prob" mode
-.multinom.postGrid = function(object) {
+.multinom.postGrid = function(object, ...) {
     linfct = object@linfct
     misc = object@misc
     # grid will have multresp as slowest-varying factor...

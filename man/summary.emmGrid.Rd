@@ -10,16 +10,15 @@
 \alias{test.emmGrid}
 \title{Summaries, predictions, intervals, and tests for \code{emmGrid} objects}
 \usage{
-\method{summary}{emmGrid}(object, infer, level, adjust, by, type, df, null,
-  delta, side, frequentist,
+\method{summary}{emmGrid}(object, infer, level, adjust, by, type, df, calc,
+  null, delta, side, frequentist,
   bias.adjust = get_emm_option("back.bias.adj"), sigma, ...)
 
-\method{predict}{emmGrid}(object, type, interval = c("none",
-  "confidence", "prediction"), level = 0.95,
+\method{predict}{emmGrid}(object, type, interval = c("none", "confidence",
+  "prediction"), level = 0.95,
   bias.adjust = get_emm_option("back.bias.adj"), sigma, ...)
 
-\method{as.data.frame}{emmGrid}(x, row.names = NULL, optional = FALSE,
-  ...)
+\method{as.data.frame}{emmGrid}(x, row.names = NULL, optional = FALSE, ...)
 
 \method{[}{summary_emm}(x, ..., as.df = TRUE)
 
@@ -27,8 +26,8 @@
 
 test(object, null, ...)
 
-\method{test}{emmGrid}(object, null = 0, joint = FALSE,
-  verbose = FALSE, rows, by, status = FALSE, ...)
+\method{test}{emmGrid}(object, null = 0, joint = FALSE, verbose = FALSE,
+  rows, by, status = FALSE, ...)
 }
 \arguments{
 \item{object}{An object of class \code{"emmGrid"} (see \link{emmGrid-class})}
@@ -65,6 +64,13 @@ and also the section below on transformations and links.}
 use in constructing confidence intervals and \emph{P} values (\code{NA}
 specifies asymptotic results).}
 
+\item{calc}{Named list of character value(s) or formula(s).
+The expressions in \code{char} are evaluated and appended to the
+summary, just after the \code{df} column. The expression may include
+any names up through \code{df} in the summary, any additional names in 
+\code{object@grid} (such as \code{.wgt.} or \code{.offset.}), or any
+earlier elements of \code{calc}.}
+
 \item{null}{Numeric. Null hypothesis value(s), on the linear-predictor scale,
 against which estimates are tested. May be a single value used for all, or
 a numeric vector of length equal to the number of tests in each family
@@ -99,8 +105,10 @@ is in effect), or for constructing prediction intervals. If not specified,
 \emph{Note:} \code{sigma} may be a vector, as long as it conforms to the number of rows
 of the reference grid.}
 
-\item{...}{(Not used by \code{summary.emmGrid}.) In
-\code{as.data.frame.emmGrid}, \code{confint.emmGrid}, \code{predict.emmGrid}, and 
+\item{...}{Optional arguments such as \code{scheffe.rank} 
+(see \dQuote{P-value adjustments}). 
+In \code{as.data.frame.emmGrid}, \code{confint.emmGrid}, 
+\code{predict.emmGrid}, and 
 \code{test.emmGrid}, these arguments are passed to
 \code{summary.emmGrid}.}
 
@@ -158,14 +166,18 @@ The \code{as.data.frame} method returns a plain data frame,
 }
 \description{
 These are the primary methods for obtaining numerical or tabular results 
-from an \code{emmGrid} object. Note that by default, summaries for Bayesian models are
+from an \code{emmGrid} object. 
+\code{summary.emmGrid} is the general function for summarizing \code{emmGrid} objects. 
+It also serves as the print method for these objects; so for convenience,
+\code{summary()} arguments may be included in calls to functions such as 
+\code{\link{emmeans}} and \code{\link{contrast}} that construct \code{emmGrid} 
+objects. Note that by default, summaries for Bayesian models are
 diverted to \code{\link{hpd.summary}}.
 }
 \details{
-\code{summary.emmGrid} is the general function for summarizing \code{emmGrid} objects. 
 \code{confint.emmGrid} is equivalent to \code{summary.emmGrid with 
 infer = c(TRUE, FALSE)}. When called with \code{joint = FALSE}, \code{test.emmGrid}
-is equivalent to \code{summary.emmGrid} with \code{infer = c(FALSE, TRUE)}.
+is equivalent to \code{summary.emmGrid} with \code{infer = c(FALSE, TRUE)}. 
 
 With \code{joint = TRUE}, \code{test.emmGrid} calculates the Wald test of the
 hypothesis \code{linfct \%*\% bhat = null}, where \code{linfct} and
@@ -193,9 +205,10 @@ The default \code{show} method for \code{emmGrid} objects (with the
 }
 \section{Defaults}{
 
-  The \code{misc} slot in \code{object} contains default values for
-  \code{by}, \code{infer}, \code{level}, \code{adjust}, \code{type},
-  \code{null}, \code{side}, and \code{delta}. These defaults vary depending
+  The \code{misc} slot in \code{object} may contain default values for
+  \code{by}, \code{calc}, \code{infer}, \code{level}, \code{adjust}, 
+  \code{type}, \code{null}, \code{side}, and \code{delta}. 
+  These defaults vary depending
   on the code that created the object. The \code{\link{update}} method may be
   used to change these defaults. In addition, any options set using 
   \samp{emm_options(summary = ...)} will trump those stored in the object's 
@@ -232,9 +245,15 @@ The default \code{show} method for \code{emmGrid} objects (with the
     of means in the family. (Available for two-sided cases only.)}
   \item{\code{"scheffe"}}{Computes \eqn{p} values from the \eqn{F}
     distribution, according to the Scheffe critical value of
-    \eqn{\sqrt{kF(k,d)}}{sqrt[k*F(k,d)]}, where \eqn{d} is the error degrees of
-    freedom and \eqn{k} is (family size minus 1) for contrasts, and (number of
-    estimates) otherwise. (Available for two-sided cases only.)}
+    \eqn{\sqrt{rF(\alpha; r, d)}}{sqrt[r*qf(alpha, r, d)]}, where \eqn{d} is
+    the error degrees of freedom and \eqn{r} is the rank of the set of linear
+    functions under consideration. By default, the value of \code{r} is
+    computed from \code{object@linfct} for each by group; however, if the
+    user specifies an argument matching \code{scheffe.rank}, its value will
+    be used instead. Ordinarily, if there are \eqn{k} means involved, then
+    \eqn{r = k - 1} for a full set of contrasts involving all \eqn{k} means, and
+    \eqn{r = k} for the means themselves. (The Scheffe adjustment is available
+    for two-sided cases only.)}
   \item{\code{"sidak"}}{Makes adjustments as if the estimates were independent
     (a conservative adjustment in many cases).}
   \item{\code{"bonferroni"}}{Multiplies \eqn{p} values, or divides significance
@@ -279,13 +298,22 @@ The default \code{show} method for \code{emmGrid} objects (with the
   non-conservative multi-step adjustments to tests.
 }
 
-\section{Testing nonsuperiority, noninferiority, or equivalence}{
+\section{Tests of significance, nonsuperiority, noninferiority, or equivalence}{
 
-  When \code{delta = 0}, test statistics are of the usual form 
-  \samp{(estimate - null)/SE}, or notationally, \eqn{t = (Q - \theta_0)/SE} 
-  where \eqn{Q} is our estimate of \eqn{\theta}; 
-  then left, right, or two-sided \eqn{p} values are produced.
-
+  When \code{delta = 0}, test statistics are the usual tests of significance.
+  They are of the form 
+  \samp{(estimate - null)/SE}. Notationally: 
+  \describe{
+    \item{Significance}{\eqn{H_0: \theta = \theta_0}  versus \cr
+       \eqn{H_1: \theta < \theta_0} (left-sided), or\cr
+      \eqn{H_1 \theta > \theta_0} (right-sided), or\cr
+      \eqn{H_1: \theta \ne \theta_0} (two-sided)\cr
+      The test statistic is\cr
+      \eqn{t = (Q - \theta_0)/SE}\cr 
+      where \eqn{Q} is our estimate of \eqn{\theta};
+      then left, right, or two-sided \eqn{p} values are produced, 
+      depending on \code{side}.}
+  }
   When \code{delta} is positive, the test statistic depends on \code{side} as
   follows.
   \describe{
@@ -300,7 +328,10 @@ The default \code{show} method for \code{emmGrid} objects (with the
   \item{Two-sided (equivalence)}{\eqn{H_0: |\theta - \theta_0| \ge \delta}
     versus \eqn{H_1: |\theta - \theta_0| < \delta}\cr
     \eqn{t = (|Q - \theta_0| - \delta)/SE}\cr
-    The \eqn{p} value is the \emph{lower}-tail probability.}
+    The \eqn{p} value is the \emph{lower}-tail probability.\cr
+    Note that \eqn{t} is the maximum of \eqn{t_{nonsup}} and \eqn{-t_{noninf}}. 
+    This is equivalent to choosing the less 
+    significant result in the two-one-sided-test (TOST) procedure.}
   } %%%%%%%%%%%% end \describe{}
 }
 
@@ -339,16 +370,24 @@ confint(warp.emm, by = NULL, level = .90)
 pigs.lm <- lm(log(conc) ~ source + factor(percent), data = pigs)
 pigs.emm <- emmeans(pigs.lm, "percent", type = "response")
 summary(pigs.emm)    # (inherits type = "response")
+summary(pigs.emm, calc = c(n = ".wgt."))  # Show sample size
 
 # For which percents is EMM non-inferior to 35, based on a 10\% threshold?
 # Note the test is done on the log scale even though we have type = "response"
 test(pigs.emm, null = log(35), delta = log(1.10), side = ">")
 
-test(contrast(pigs.emm, "consec"))
+con <- contrast(pigs.emm, "consec")
+test(con)
 
-test(contrast(pigs.emm, "consec"), joint = TRUE)
+test(con, joint = TRUE)
+
+# default Scheffe adjustment - rank = 3
+summary(con, infer = c(TRUE, TRUE), adjust = "scheffe")
+
+# Consider as some of many possible contrasts among the six cell means
+summary(con, infer = c(TRUE, TRUE), adjust = "scheffe", scheffe.rank = 5)
 
 }
 \seealso{
-\code{link{hpd.summary}}
+\code{\link{hpd.summary}}
 }

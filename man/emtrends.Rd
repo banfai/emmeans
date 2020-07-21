@@ -4,8 +4,7 @@
 \alias{emtrends}
 \title{Estimated marginal means of linear trends}
 \usage{
-emtrends(object, specs, var, delta.var = 0.001 * rng, max.degree = 1,
-  ...)
+emtrends(object, specs, var, delta.var = 0.001 * rng, max.degree = 1, ...)
 }
 \arguments{
 \item{object}{A supported model object (\emph{not} a reference grid)}
@@ -112,7 +111,7 @@ emtrends(fiber.lm, ~ machine | diameter, var = "sqrt(diameter)",
 # Obtaining a reference grid
 mtcars.lm <- lm(mpg ~ poly(disp, degree = 2) * (factor(cyl) + factor(am)), data = mtcars)
 
-Center trends at mean disp for each no. of cylinders
+# Center trends at mean disp for each no. of cylinders
 mtcTrends.rg <- emtrends(mtcars.lm, var = "disp", 
                           cov.reduce = disp ~ factor(cyl))
 summary(mtcTrends.rg)  # estimated trends at grid nodes
@@ -136,5 +135,5 @@ contrast(emm, "poly")
 # Some P values are comparable, some aren't! See Note in documentation
 }
 \seealso{
-\code{link{emmeans}}, \code{\link{ref_grid}}
+\code{\link{emmeans}}, \code{\link{ref_grid}}
 }
