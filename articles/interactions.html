@@ -14,8 +14,8 @@
 <link rel="apple-touch-icon" type="image/png" sizes="60x60" href="../apple-touch-icon-60x60.png">
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.4.2/css/all.min.css" rel="stylesheet">
-<link href="../deps/font-awesome-6.4.2/css/v4-shims.min.css" rel="stylesheet">
+<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Interaction analysis in emmeans">
 </head>
 <body>
@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">emmeans</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.10.4.900001</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.10.6-090003</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -78,7 +78,7 @@
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.png" class="logo" alt=""><h1>Interaction analysis in emmeans</h1>
                         <h4 data-toc-skip class="author">emmeans
-package, Version 1.10.4.900001</h4>
+package, Version 1.10.6.90003</h4>
             
       
       <small class="dont-index">Source: <a href="https://github.com/rvlenth/emmeans/blob/master/vignettes/interactions.Rmd" class="external-link"><code>vignettes/interactions.Rmd</code></a></small>
@@ -149,10 +149,10 @@ interactions!). They would go straight to analyses like this:</p>
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/emmeans.html">emmeans</a></span><span class="op">(</span><span class="va">noise.lm</span>, <span class="va">pairwise</span> <span class="op">~</span> <span class="va">size</span><span class="op">)</span></span></code></pre></div>
 <pre class="re"><code><span><span class="co">## NOTE: Results may be misleading due to involvement in interactions</span></span></code></pre>
 <pre class="ro"><code><span><span class="co">## $emmeans</span></span>
-<span><span class="co">##  size emmean     SE df lower.CL upper.CL</span></span>
-<span><span class="co">##  S     82.42 0.1102 24    82.19    82.64</span></span>
-<span><span class="co">##  M     83.38 0.1102 24    83.15    83.60</span></span>
-<span><span class="co">##  L     77.25 0.1102 24    77.02    77.48</span></span>
+<span><span class="co">##  size emmean   SE df lower.CL upper.CL</span></span>
+<span><span class="co">##  S     82.42 0.11 24    82.19    82.64</span></span>
+<span><span class="co">##  M     83.38 0.11 24    83.15    83.60</span></span>
+<span><span class="co">##  L     77.25 0.11 24    77.02    77.48</span></span>
 <span><span class="co">## </span></span>
 <span><span class="co">## Results are averaged over the levels of: type, side </span></span>
 <span><span class="co">## Confidence level used: 0.95 </span></span>
@@ -192,16 +192,16 @@ conditioning on <code>type</code>:</p>
 <code class="sourceCode R"><span><span class="va">emm_s.t</span></span></code></pre></div>
 <pre class="ro"><code><span><span class="co">## $emmeans</span></span>
 <span><span class="co">## type = Std:</span></span>
-<span><span class="co">##  size emmean     SE df lower.CL upper.CL</span></span>
-<span><span class="co">##  S     82.58 0.1559 24    82.26    82.91</span></span>
-<span><span class="co">##  M     84.58 0.1559 24    84.26    84.91</span></span>
-<span><span class="co">##  L     77.50 0.1559 24    77.18    77.82</span></span>
+<span><span class="co">##  size emmean    SE df lower.CL upper.CL</span></span>
+<span><span class="co">##  S     82.58 0.156 24    82.26    82.91</span></span>
+<span><span class="co">##  M     84.58 0.156 24    84.26    84.91</span></span>
+<span><span class="co">##  L     77.50 0.156 24    77.18    77.82</span></span>
 <span><span class="co">## </span></span>
 <span><span class="co">## type = Octel:</span></span>
-<span><span class="co">##  size emmean     SE df lower.CL upper.CL</span></span>
-<span><span class="co">##  S     82.25 0.1559 24    81.93    82.57</span></span>
-<span><span class="co">##  M     82.17 0.1559 24    81.84    82.49</span></span>
-<span><span class="co">##  L     77.00 0.1559 24    76.68    77.32</span></span>
+<span><span class="co">##  size emmean    SE df lower.CL upper.CL</span></span>
+<span><span class="co">##  S     82.25 0.156 24    81.93    82.57</span></span>
+<span><span class="co">##  M     82.17 0.156 24    81.84    82.49</span></span>
+<span><span class="co">##  L     77.00 0.156 24    76.68    77.32</span></span>
 <span><span class="co">## </span></span>
 <span><span class="co">## Results are averaged over the levels of: side </span></span>
 <span><span class="co">## Confidence level used: 0.95 </span></span>

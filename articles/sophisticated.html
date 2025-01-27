@@ -14,8 +14,8 @@
 <link rel="apple-touch-icon" type="image/png" sizes="60x60" href="../apple-touch-icon-60x60.png">
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link href="../deps/bootstrap-5.3.1/bootstrap.min.css" rel="stylesheet">
-<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.4.2/css/all.min.css" rel="stylesheet">
-<link href="../deps/font-awesome-6.4.2/css/v4-shims.min.css" rel="stylesheet">
+<script src="../deps/bootstrap-5.3.1/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Sophisticated models in emmeans">
 </head>
 <body>
@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">emmeans</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.10.4.900001</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.10.6-090003</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -78,7 +78,7 @@
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.png" class="logo" alt=""><h1>Sophisticated models in emmeans</h1>
                         <h4 data-toc-skip class="author">emmeans
-package, Version 1.10.4.900001</h4>
+package, Version 1.10.6.90003</h4>
             
       
       <small class="dont-index">Source: <a href="https://github.com/rvlenth/emmeans/blob/master/vignettes/sophisticated.Rmd" class="external-link"><code>vignettes/sophisticated.Rmd</code></a></small>
@@ -196,9 +196,9 @@ test polynomial contrasts:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/contrast.html">contrast</a></span><span class="op">(</span><span class="va">Oats.emm.n</span>, <span class="st">"poly"</span><span class="op">)</span></span></code></pre></div>
 <pre class="ro"><code><span><span class="co">##  contrast  estimate    SE   df t.ratio p.value</span></span>
-<span><span class="co">##  linear      152.69 15.58 43.2   9.802  &lt;.0001</span></span>
+<span><span class="co">##  linear      152.69 15.60 43.2   9.802  &lt;.0001</span></span>
 <span><span class="co">##  quadratic    -8.27  6.95 44.2  -1.190  0.2402</span></span>
-<span><span class="co">##  cubic        -6.32 15.21 42.8  -0.415  0.6800</span></span>
+<span><span class="co">##  cubic        -6.32 15.20 42.8  -0.415  0.6800</span></span>
 <span><span class="co">## </span></span>
 <span><span class="co">## Results are averaged over the levels of: Variety </span></span>
 <span><span class="co">## Degrees-of-freedom method: kenward-roger</span></span></code></pre>
@@ -336,28 +336,28 @@ as <code>cw.emm@grid</code>.</p>
 <span><span class="co">##     5     63.2  1.49 45.5     60.2     66.2</span></span>
 <span><span class="co">##    10     91.1  4.11 45.8     83.0     99.5</span></span>
 <span><span class="co">##    15    124.5  7.81 46.1    109.3    140.8</span></span>
-<span><span class="co">##    20    163.6 12.45 46.2    139.6    189.7</span></span>
+<span><span class="co">##    20    163.6 12.40 46.2    139.6    189.7</span></span>
 <span><span class="co">## </span></span>
 <span><span class="co">## Diet = 2:</span></span>
 <span><span class="co">##  Time response    SE   df lower.CL upper.CL</span></span>
 <span><span class="co">##     5     69.3  2.15 45.0     65.1     73.7</span></span>
 <span><span class="co">##    10    106.6  6.14 44.9     94.6    119.3</span></span>
-<span><span class="co">##    15    152.3 11.97 44.9    129.1    177.4</span></span>
+<span><span class="co">##    15    152.3 12.00 44.9    129.1    177.4</span></span>
 <span><span class="co">##    20    206.5 19.40 44.9    169.3    247.5</span></span>
 <span><span class="co">## </span></span>
 <span><span class="co">## Diet = 3:</span></span>
 <span><span class="co">##  Time response    SE   df lower.CL upper.CL</span></span>
 <span><span class="co">##     5     72.8  2.20 45.0     68.4     77.3</span></span>
 <span><span class="co">##    10    121.3  6.56 44.9    108.5    134.9</span></span>
-<span><span class="co">##    15    182.7 13.13 44.9    157.2    210.1</span></span>
-<span><span class="co">##    20    256.9 21.69 44.9    215.1    302.4</span></span>
+<span><span class="co">##    15    182.7 13.10 44.9    157.2    210.1</span></span>
+<span><span class="co">##    20    256.9 21.70 44.9    215.1    302.4</span></span>
 <span><span class="co">## </span></span>
 <span><span class="co">## Diet = 4:</span></span>
 <span><span class="co">##  Time response    SE   df lower.CL upper.CL</span></span>
 <span><span class="co">##     5     76.4  2.26 45.0     71.9     81.0</span></span>
 <span><span class="co">##    10    119.4  6.50 45.0    106.6    132.8</span></span>
-<span><span class="co">##    15    172.4 12.75 45.0    147.7    199.1</span></span>
-<span><span class="co">##    20    235.5 20.76 45.0    195.5    279.2</span></span>
+<span><span class="co">##    15    172.4 12.80 45.0    147.7    199.1</span></span>
+<span><span class="co">##    20    235.5 20.80 45.0    195.5    279.2</span></span>
 <span><span class="co">## </span></span>
 <span><span class="co">## Degrees-of-freedom method: kenward-roger </span></span>
 <span><span class="co">## Confidence level used: 0.95 </span></span>
@@ -752,7 +752,7 @@ example:</p>
 <span><span class="co">##   For precise Bayes factors, sampling at least 40,000 posterior samples is recommended.</span></span></code></pre>
 <pre class="ro"><code><span><span class="co">## Bayes Factor (Savage-Dickey density ratio)</span></span>
 <span><span class="co">## </span></span>
-<span><span class="co">## Parameter         |    BF</span></span>
+<span><span class="co">## contrast          |    BF</span></span>
 <span><span class="co">## -------------------------</span></span>
 <span><span class="co">## period1 - period2 |  3.02</span></span>
 <span><span class="co">## period1 - period3 |  5.13</span></span>
@@ -766,7 +766,7 @@ example:</p>
 <code class="sourceCode R"><span><span class="fu">bayestestR</span><span class="fu">::</span><span class="fu"><a href="https://easystats.github.io/bayestestR/reference/p_rope.html" class="external-link">p_rope</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/graphics/pairs.html" class="external-link">pairs</a></span><span class="op">(</span><span class="va">cbpp.rg</span><span class="op">)</span>, range <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">0.25</span>, <span class="fl">0.25</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <pre class="ro"><code><span><span class="co">## Proportion of samples inside the ROPE [-0.25, 0.25]</span></span>
 <span><span class="co">## </span></span>
-<span><span class="co">## Parameter         | p (ROPE)</span></span>
+<span><span class="co">## contrast          | p (ROPE)</span></span>
 <span><span class="co">## ----------------------------</span></span>
 <span><span class="co">## period1 - period2 |    0.021</span></span>
 <span><span class="co">## period1 - period3 |    0.015</span></span>
